@@ -795,6 +795,113 @@ impl Cpu {
     // CB prefixed operations.
 
     fn prefix_cb(&mut self, _opcode: u8) {
-        todo!()
+        let cb_opcode = self.fetch_byte_pc();
+        match cb_opcode {
+            0x00..=0x07 => self.rlc(cb_opcode),
+            0x08..=0x0F => self.rrc(cb_opcode),
+            0x10..=0x17 => self.rl(cb_opcode),
+            0x18..=0x1F => self.rr(cb_opcode),
+            0x20..=0x27 => self.sla(cb_opcode),
+            0x28..=0x2F => self.sra(cb_opcode),
+            0x30..=0x37 => self.swap(cb_opcode),
+            0x38..=0x3F => self.srl(cb_opcode),
+            0x40..=0x7F => self.bit(cb_opcode),
+            0x80..=0xBF => self.res(cb_opcode),
+            0xC0..=0xFF => self.set(cb_opcode)
+        }
+    }
+
+    fn rlc(&mut self, opcode: u8) {
+        let index = RegisterIndex::from_opcode_second(opcode);
+        let value = self.r(index);
+        self.registers.set_carry_flag(value >> 7 != 0);
+        self.set_r(index, value.rotate_left(1));
+    }
+
+    fn rrc(&mut self, opcode: u8) {
+        let index = RegisterIndex::from_opcode_second(opcode);
+        let value = self.r(index);
+        self.registers.set_carry_flag(value & 0b1 != 0);
+        self.set_r(index, value.rotate_right(1));
+    }
+
+    fn rl(&mut self, opcode: u8) {
+        let index = RegisterIndex::from_opcode_second(opcode);
+        let carry_bit = u8::from(self.registers.carry_flag());
+        let old_value = self.r(index);
+        let value = (old_value << 1) | carry_bit;
+        self.registers.clear_flags();
+        self.registers.set_carry_flag(old_value >> 7 != 0);
+        self.registers.update_zero_flag(value);
+        self.set_r(index, value);
+    }
+
+    fn rr(&mut self, opcode: u8) {
+        let index = RegisterIndex::from_opcode_second(opcode);
+        let carry_bit = u8::from(self.registers.carry_flag()) << 7;
+        let old_value = self.r(index);
+        let value = (old_value >> 1) | carry_bit;
+        self.registers.clear_flags();
+        self.registers.set_carry_flag(old_value & 0b1 != 0);
+        self.registers.update_zero_flag(value);
+        self.set_r(index, value);
+    }
+
+    fn sla(&mut self, opcode: u8) {
+        let index = RegisterIndex::from_opcode_second(opcode);
+        let old_value = self.r(index);
+        let value = old_value << 1;
+        self.registers.clear_flags();
+        self.registers.set_carry_flag(old_value >> 7 != 0);
+        self.registers.update_zero_flag(value);
+        self.set_r(index, value);
+    }
+
+    fn sra(&mut self, opcode: u8) {
+        let index = RegisterIndex::from_opcode_second(opcode);
+        let old_value = self.r(index);
+        let value = (old_value >> 1) & (old_value & 0x80);
+        self.registers.clear_flags();
+        self.registers.set_carry_flag(old_value & 0b1 != 0);
+        self.registers.update_zero_flag(value);
+        self.set_r(index, value);
+    }
+
+    fn srl(&mut self, opcode: u8) {
+        let index = RegisterIndex::from_opcode_second(opcode);
+        let old_value = self.r(index);
+        let value = old_value >> 1;
+        self.registers.clear_flags();
+        self.registers.set_carry_flag(old_value & 0b1 != 0);
+        self.registers.update_zero_flag(value);
+        self.set_r(index, value);
+    }
+
+    fn swap(&mut self, opcode: u8) {
+        let index = RegisterIndex::from_opcode_second(opcode);
+        let value = self.r(index).rotate_left(4);
+        self.registers.clear_flags();
+        self.registers.update_zero_flag(value);
+        self.set_r(index, value);
+    }
+
+    fn bit(&mut self, opcode: u8) {
+        let index = RegisterIndex::from_opcode_second(opcode);
+        self.registers.set_negative_flag(false);
+        self.registers.set_half_carry_flag(true);
+        let bit_test =  self.r(index) & (1 << ((opcode >> 3) & 0b111));
+        self.registers.update_zero_flag(bit_test);
+    }
+
+    fn res(&mut self, opcode: u8) {
+        let index = RegisterIndex::from_opcode_second(opcode);
+        let value = self.r(index) & !(1 << ((opcode >> 3) & 0b111));
+        self.set_r(index, value);
+    }
+
+    fn set(&mut self, opcode: u8) {
+        let index = RegisterIndex::from_opcode_second(opcode);
+        let value = self.r(index) | (1 << ((opcode >> 3) & 0b111));
+        self.set_r(index, value);
     }
 }
