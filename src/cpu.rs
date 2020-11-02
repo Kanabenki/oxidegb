@@ -40,6 +40,93 @@ enum FlagOp {
 }
 
 #[derive(Debug, Copy, Clone)]
+struct Flags(FlagSet<Flag>);
+
+impl Flags {
+    fn is_set(&self, flag: Flag) -> bool {
+        self.0.contains(flag)
+    }
+
+    fn set(&mut self, flag: Flag, set: bool) {
+        if set {
+            self.0 |= flag;
+        } else {
+            self.0 &= !flag;
+        }
+    }
+
+    fn value(&self) -> u8 {
+        self.0.bits()
+    }
+
+    fn set_value(&mut self, value: u8) {
+        self.0 = FlagSet::new_truncated(value);
+    }
+
+    fn update_carry_u8(&mut self, lhs: u8, rhs: u8, with_carry: bool, flag_op: FlagOp) {
+        let carry = u8::from(with_carry && self.carry());
+        let set = match flag_op {
+            FlagOp::Carry => lhs as u16 + rhs as u16 + carry as u16 > 0xff,
+            FlagOp::Borrow => (lhs as u16) < (rhs as u16 + carry as u16),
+        };
+        self.set(Flag::H, set);
+    }
+
+    fn update_carry_u16(&mut self, lhs: u16, rhs: u16, flag_op: FlagOp) {
+        let set = match flag_op {
+            FlagOp::Carry => lhs as u32 + rhs as u32 > 0xffff,
+            FlagOp::Borrow => lhs < rhs,
+        };
+        self.set(Flag::H, set);
+    }
+
+    fn update_half_carry_u8(&mut self, lhs: u8, rhs: u8, with_carry: bool, flag_op: FlagOp) {
+        let carry = u8::from(with_carry && self.carry());
+        let set = match flag_op {
+            FlagOp::Carry => ((lhs & 0xf) + (rhs & 0xf)) + carry > 0xf,
+            FlagOp::Borrow => (lhs & 0xf) < ((rhs & 0xf) + carry),
+        };
+        self.set(Flag::H, set);
+    }
+
+    fn update_half_carry_u16(&mut self, lhs: u16, rhs: u16, flag_op: FlagOp) {
+        let set = match flag_op {
+            FlagOp::Carry => ((lhs & 0xfff) + (rhs & 0xfff)) > 0xfff,
+            FlagOp::Borrow => (lhs & 0xfff) < (rhs & 0xfff),
+        };
+        self.set(Flag::H, set);
+    }
+
+    fn update_zero(&mut self, value: u8) {
+        self.set(Flag::Z, value == 0);
+    }
+
+    fn zero(&self) -> bool {
+        self.is_set(Flag::Z)
+    }
+
+    fn set_negative(&mut self, set: bool) {
+        self.set(Flag::N, set);
+    }
+
+    fn set_half_carry(&mut self, set: bool) {
+        self.set(Flag::H, set);
+    }
+
+    fn carry(&self) -> bool {
+        self.is_set(Flag::C)
+    }
+
+    fn set_carry(&mut self, set: bool) {
+        self.set(Flag::C, set);
+    }
+
+    fn clear(&mut self) {
+        self.0 = FlagSet::new_truncated(0);
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 struct Registers {
     b: u8,
     c: u8,
@@ -47,7 +134,7 @@ struct Registers {
     e: u8,
     h: u8,
     l: u8,
-    f: FlagSet<Flag>,
+    flags: Flags,
     a: u8,
     sp: u16,
     pc: u16,
@@ -124,87 +211,13 @@ impl Registers {
     }
 
     fn af(&self) -> u16 {
-        u16::from_be_bytes([self.a, self.f.bits()])
+        u16::from_be_bytes([self.a, self.flags.value()])
     }
 
     fn set_af(&mut self, value: u16) {
         let [high, low] = value.to_be_bytes();
         self.a = high;
-        self.f = FlagSet::new_truncated(low);
-    }
-
-    fn flag(&self, flag: Flag) -> bool {
-        self.f.contains(flag)
-    }
-
-    fn set_flag(&mut self, flag: Flag, set: bool) {
-        if set {
-            self.f |= flag;
-        } else {
-            self.f &= !flag;
-        }
-    }
-
-    fn update_carry_flag_u8(&mut self, lhs: u8, rhs: u8, with_carry: bool, flag_op: FlagOp) {
-        let carry = u8::from(with_carry && self.carry_flag());
-        let set = match flag_op {
-            FlagOp::Carry => lhs as u16 + rhs as u16 + carry as u16 > 0xff,
-            FlagOp::Borrow => (lhs as u16) < (rhs as u16 + carry as u16),
-        };
-        self.set_flag(Flag::H, set);
-    }
-
-    fn update_carry_flag_u16(&mut self, lhs: u16, rhs: u16, flag_op: FlagOp) {
-        let set = match flag_op {
-            FlagOp::Carry => lhs as u32 + rhs as u32 > 0xffff,
-            FlagOp::Borrow => lhs < rhs,
-        };
-        self.set_flag(Flag::H, set);
-    }
-
-    fn update_half_carry_flag_u8(&mut self, lhs: u8, rhs: u8, with_carry: bool, flag_op: FlagOp) {
-        let carry = u8::from(with_carry && self.carry_flag());
-        let set = match flag_op {
-            FlagOp::Carry => ((lhs & 0xf) + (rhs & 0xf)) + carry > 0xf,
-            FlagOp::Borrow => (lhs & 0xf) < ((rhs & 0xf) + carry),
-        };
-        self.set_flag(Flag::H, set);
-    }
-
-    fn update_half_carry_flag_u16(&mut self, lhs: u16, rhs: u16, flag_op: FlagOp) {
-        let set = match flag_op {
-            FlagOp::Carry => ((lhs & 0xfff) + (rhs & 0xfff)) > 0xfff,
-            FlagOp::Borrow => (lhs & 0xfff) < (rhs & 0xfff),
-        };
-        self.set_flag(Flag::H, set);
-    }
-
-    fn update_zero_flag(&mut self, value: u8) {
-        self.set_flag(Flag::Z, value == 0);
-    }
-
-    fn zero_flag(&self) -> bool {
-        self.flag(Flag::Z)
-    }
-
-    fn set_negative_flag(&mut self, set: bool) {
-        self.set_flag(Flag::N, set);
-    }
-
-    fn set_half_carry_flag(&mut self, set: bool) {
-        self.set_flag(Flag::H, set);
-    }
-
-    fn carry_flag(&self) -> bool {
-        self.flag(Flag::C)
-    }
-
-    fn set_carry_flag(&mut self, set: bool) {
-        self.set_flag(Flag::C, set);
-    }
-
-    fn clear_flags(&mut self) {
-        self.f = FlagSet::new_truncated(0);
+        self.flags.set_value(low);
     }
 }
 
@@ -291,10 +304,10 @@ impl Cpu {
 
     fn test_cc(&self, opcode: u8) -> bool {
         match (opcode >> 3) & 0b11 {
-            0 => !self.registers.zero_flag(),
-            1 => self.registers.zero_flag(),
-            2 => !self.registers.carry_flag(),
-            3 => self.registers.carry_flag(),
+            0 => !self.registers.flags.zero(),
+            1 => self.registers.flags.zero(),
+            2 => !self.registers.flags.carry(),
+            3 => self.registers.flags.carry(),
             _ => unreachable!(),
         }
     }
@@ -403,11 +416,13 @@ impl Cpu {
     fn ld_hl_spu8(&mut self, _opcode: u8) {
         let sp_value = self.registers.sp;
         let u8_value = self.fetch_byte_pc() as i8 as u16;
-        self.registers.clear_flags();
+        self.registers.flags.clear();
         self.registers
-            .update_carry_flag_u16(sp_value, u8_value, FlagOp::Carry);
+            .flags
+            .update_carry_u16(sp_value, u8_value, FlagOp::Carry);
         self.registers
-            .update_half_carry_flag_u16(sp_value, u8_value, FlagOp::Carry);
+            .flags
+            .update_half_carry_u16(sp_value, u8_value, FlagOp::Carry);
         self.registers.set_hl((Wr(sp_value) + Wr(u8_value)).0);
     }
 
@@ -441,10 +456,11 @@ impl Cpu {
         let index = RegisterIndex::from_opcode_first(opcode);
         let prev_value = self.r(index);
         self.registers
-            .update_half_carry_flag_u8(prev_value, 1, false, FlagOp::Carry);
+            .flags
+            .update_half_carry_u8(prev_value, 1, false, FlagOp::Carry);
         let value = Wr(prev_value) + Wr(1);
-        self.registers.set_negative_flag(false);
-        self.registers.update_zero_flag(value.0);
+        self.registers.flags.set_negative(false);
+        self.registers.flags.update_zero(value.0);
         self.set_r(index, value.0);
     }
 
@@ -452,10 +468,11 @@ impl Cpu {
         let index = RegisterIndex::from_opcode_first(opcode);
         let prev_value = self.r(index);
         self.registers
-            .update_half_carry_flag_u8(prev_value, 1, false, FlagOp::Borrow);
+            .flags
+            .update_half_carry_u8(prev_value, 1, false, FlagOp::Borrow);
         let value = Wr(prev_value) - Wr(1);
-        self.registers.set_negative_flag(true);
-        self.registers.update_zero_flag(value.0);
+        self.registers.flags.set_negative(true);
+        self.registers.flags.update_zero(value.0);
         self.set_r(index, value.0);
     }
 
@@ -474,18 +491,19 @@ impl Cpu {
     // Arithmetic operations.
 
     fn add_a_generic(&mut self, added: u8, with_carry: bool) {
-        self.registers.set_negative_flag(false);
-        self.registers.update_half_carry_flag_u8(
+        self.registers.flags.set_negative(false);
+        self.registers.flags.update_half_carry_u8(
             self.registers.a,
             added,
             with_carry,
             FlagOp::Carry,
         );
         self.registers
-            .update_carry_flag_u8(self.registers.a, added, with_carry, FlagOp::Carry);
-        let carry_bit = u8::from(with_carry && self.registers.carry_flag());
+            .flags
+            .update_carry_u8(self.registers.a, added, with_carry, FlagOp::Carry);
+        let carry_bit = u8::from(with_carry && self.registers.flags.carry());
         let value = (Wr(self.registers.a) + Wr(added) + Wr(carry_bit)).0;
-        self.registers.update_zero_flag(value);
+        self.registers.flags.update_zero(value);
         self.registers.a = value;
     }
 
@@ -512,18 +530,19 @@ impl Cpu {
     }
 
     fn sub_a_generic(&mut self, subbed: u8, with_carry: bool) {
-        self.registers.set_negative_flag(true);
-        self.registers.update_half_carry_flag_u8(
+        self.registers.flags.set_negative(true);
+        self.registers.flags.update_half_carry_u8(
             self.registers.a,
             subbed,
             with_carry,
             FlagOp::Borrow,
         );
         self.registers
-            .update_carry_flag_u8(self.registers.a, subbed, with_carry, FlagOp::Borrow);
-        let carry_bit = u8::from(with_carry && self.registers.carry_flag());
+            .flags
+            .update_carry_u8(self.registers.a, subbed, with_carry, FlagOp::Borrow);
+        let carry_bit = u8::from(with_carry && self.registers.flags.carry());
         let value = (Wr(self.registers.a) - Wr(subbed) - Wr(carry_bit)).0;
-        self.registers.update_zero_flag(value);
+        self.registers.flags.update_zero(value);
         self.registers.a = value;
     }
 
@@ -553,22 +572,26 @@ impl Cpu {
         let index = DoubleRegisterIndex::from_opcode(opcode);
         let hl_value = self.registers.hl();
         let reg_value = self.registers.rr(index);
-        self.registers.set_negative_flag(false);
+        self.registers.flags.set_negative(false);
         self.registers
-            .update_half_carry_flag_u16(hl_value, reg_value, FlagOp::Carry);
+            .flags
+            .update_half_carry_u16(hl_value, reg_value, FlagOp::Carry);
         self.registers
-            .update_carry_flag_u16(hl_value, reg_value, FlagOp::Carry);
+            .flags
+            .update_carry_u16(hl_value, reg_value, FlagOp::Carry);
         self.registers.set_hl((Wr(hl_value) + Wr(reg_value)).0);
     }
 
     fn add_sp_r8(&mut self, _opcode: u8) {
-        self.registers.clear_flags();
+        self.registers.flags.clear();
         let sp_value = self.registers.sp;
         let r8_value = self.fetch_byte_pc() as i8 as u16;
         self.registers
-            .update_carry_flag_u16(sp_value, r8_value, FlagOp::Carry);
+            .flags
+            .update_carry_u16(sp_value, r8_value, FlagOp::Carry);
         self.registers
-            .update_half_carry_flag_u16(sp_value, r8_value, FlagOp::Carry);
+            .flags
+            .update_half_carry_u16(sp_value, r8_value, FlagOp::Carry);
         self.registers.sp = (Wr(sp_value) + Wr(r8_value)).0;
     }
 
@@ -576,9 +599,9 @@ impl Cpu {
 
     fn and_a_generic(&mut self, value: u8) {
         self.registers.a &= value;
-        self.registers.clear_flags();
-        self.registers.set_half_carry_flag(true);
-        self.registers.update_zero_flag(self.registers.a);
+        self.registers.flags.clear();
+        self.registers.flags.set_half_carry(true);
+        self.registers.flags.update_zero(self.registers.a);
     }
 
     fn and_a_r(&mut self, opcode: u8) {
@@ -593,8 +616,8 @@ impl Cpu {
 
     fn or_a_generic(&mut self, value: u8) {
         self.registers.a |= value;
-        self.registers.clear_flags();
-        self.registers.update_zero_flag(self.registers.a);
+        self.registers.flags.clear();
+        self.registers.flags.update_zero(self.registers.a);
     }
 
     fn or_a_r(&mut self, opcode: u8) {
@@ -609,8 +632,8 @@ impl Cpu {
 
     fn xor_a_generic(&mut self, value: u8) {
         self.registers.a ^= value;
-        self.registers.clear_flags();
-        self.registers.update_zero_flag(self.registers.a);
+        self.registers.flags.clear();
+        self.registers.flags.update_zero(self.registers.a);
     }
 
     fn xor_a_r(&mut self, opcode: u8) {
@@ -624,13 +647,15 @@ impl Cpu {
     }
 
     fn cp_a_generic(&mut self, subbed: u8) {
-        self.registers.set_negative_flag(true);
+        self.registers.flags.set_negative(true);
         self.registers
-            .update_half_carry_flag_u8(self.registers.a, subbed, false, FlagOp::Borrow);
+            .flags
+            .update_half_carry_u8(self.registers.a, subbed, false, FlagOp::Borrow);
         self.registers
-            .update_carry_flag_u8(self.registers.a, subbed, false, FlagOp::Borrow);
+            .flags
+            .update_carry_u8(self.registers.a, subbed, false, FlagOp::Borrow);
         let value = (Wr(self.registers.a) - Wr(subbed)).0;
-        self.registers.update_zero_flag(value);
+        self.registers.flags.update_zero(value);
     }
 
     fn cp_a_r(&mut self, opcode: u8) {
@@ -647,38 +672,38 @@ impl Cpu {
 
     fn rlca(&mut self, _opcode: u8) {
         let carry_set = (self.registers.a >> 7) != 0;
-        self.registers.clear_flags();
-        self.registers.set_carry_flag(carry_set);
+        self.registers.flags.clear();
+        self.registers.flags.set_carry(carry_set);
         self.registers.a = self.registers.a.rotate_left(1);
     }
 
     fn rrca(&mut self, _opcode: u8) {
         let carry_set = (self.registers.a & 0b1) != 0;
-        self.registers.clear_flags();
-        self.registers.set_carry_flag(carry_set);
+        self.registers.flags.clear();
+        self.registers.flags.set_carry(carry_set);
         self.registers.a = self.registers.a.rotate_right(1);
     }
 
     fn rla(&mut self, _opcode: u8) {
         let carry_set = (self.registers.a >> 7) != 0;
-        let carry_bit = u8::from(self.registers.carry_flag());
-        self.registers.clear_flags();
-        self.registers.set_carry_flag(carry_set);
+        let carry_bit = u8::from(self.registers.flags.carry());
+        self.registers.flags.clear();
+        self.registers.flags.set_carry(carry_set);
         self.registers.a = (self.registers.a << 1) | carry_bit;
     }
 
     fn rra(&mut self, _opcode: u8) {
         let carry_set = (self.registers.a & 0b1) != 0;
-        let carry_bit = u8::from(self.registers.carry_flag()) << 7;
-        self.registers.clear_flags();
-        self.registers.set_carry_flag(carry_set);
+        let carry_bit = u8::from(self.registers.flags.carry()) << 7;
+        self.registers.flags.clear();
+        self.registers.flags.set_carry(carry_set);
         self.registers.a = (self.registers.a >> 1) | carry_bit;
     }
 
     fn cpl(&mut self, _opcode: u8) {
         self.registers.a = !self.registers.a;
-        self.registers.set_negative_flag(true);
-        self.registers.set_half_carry_flag(true);
+        self.registers.flags.set_negative(true);
+        self.registers.flags.set_half_carry(true);
     }
 
     fn daa(&mut self, _opcode: u8) {
@@ -749,15 +774,17 @@ impl Cpu {
     // Flags operations.
 
     fn scf(&mut self, _opcode: u8) {
-        self.registers.set_half_carry_flag(false);
-        self.registers.set_negative_flag(false);
-        self.registers.set_carry_flag(true);
+        self.registers.flags.set_half_carry(false);
+        self.registers.flags.set_negative(false);
+        self.registers.flags.set_carry(true);
     }
 
     fn ccf(&mut self, _opcode: u8) {
-        self.registers.set_half_carry_flag(false);
-        self.registers.set_negative_flag(false);
-        self.registers.set_carry_flag(!self.registers.carry_flag());
+        self.registers.flags.set_half_carry(false);
+        self.registers.flags.set_negative(false);
+        self.registers
+            .flags
+            .set_carry(!self.registers.flags.carry());
     }
 
     // Stack operations.
@@ -807,43 +834,43 @@ impl Cpu {
             0x38..=0x3F => self.srl(cb_opcode),
             0x40..=0x7F => self.bit(cb_opcode),
             0x80..=0xBF => self.res(cb_opcode),
-            0xC0..=0xFF => self.set(cb_opcode)
+            0xC0..=0xFF => self.set(cb_opcode),
         }
     }
 
     fn rlc(&mut self, opcode: u8) {
         let index = RegisterIndex::from_opcode_second(opcode);
         let value = self.r(index);
-        self.registers.set_carry_flag(value >> 7 != 0);
+        self.registers.flags.set_carry(value >> 7 != 0);
         self.set_r(index, value.rotate_left(1));
     }
 
     fn rrc(&mut self, opcode: u8) {
         let index = RegisterIndex::from_opcode_second(opcode);
         let value = self.r(index);
-        self.registers.set_carry_flag(value & 0b1 != 0);
+        self.registers.flags.set_carry(value & 0b1 != 0);
         self.set_r(index, value.rotate_right(1));
     }
 
     fn rl(&mut self, opcode: u8) {
         let index = RegisterIndex::from_opcode_second(opcode);
-        let carry_bit = u8::from(self.registers.carry_flag());
+        let carry_bit = u8::from(self.registers.flags.carry());
         let old_value = self.r(index);
         let value = (old_value << 1) | carry_bit;
-        self.registers.clear_flags();
-        self.registers.set_carry_flag(old_value >> 7 != 0);
-        self.registers.update_zero_flag(value);
+        self.registers.flags.clear();
+        self.registers.flags.set_carry(old_value >> 7 != 0);
+        self.registers.flags.update_zero(value);
         self.set_r(index, value);
     }
 
     fn rr(&mut self, opcode: u8) {
         let index = RegisterIndex::from_opcode_second(opcode);
-        let carry_bit = u8::from(self.registers.carry_flag()) << 7;
+        let carry_bit = u8::from(self.registers.flags.carry()) << 7;
         let old_value = self.r(index);
         let value = (old_value >> 1) | carry_bit;
-        self.registers.clear_flags();
-        self.registers.set_carry_flag(old_value & 0b1 != 0);
-        self.registers.update_zero_flag(value);
+        self.registers.flags.clear();
+        self.registers.flags.set_carry(old_value & 0b1 != 0);
+        self.registers.flags.update_zero(value);
         self.set_r(index, value);
     }
 
@@ -851,9 +878,9 @@ impl Cpu {
         let index = RegisterIndex::from_opcode_second(opcode);
         let old_value = self.r(index);
         let value = old_value << 1;
-        self.registers.clear_flags();
-        self.registers.set_carry_flag(old_value >> 7 != 0);
-        self.registers.update_zero_flag(value);
+        self.registers.flags.clear();
+        self.registers.flags.set_carry(old_value >> 7 != 0);
+        self.registers.flags.update_zero(value);
         self.set_r(index, value);
     }
 
@@ -861,9 +888,9 @@ impl Cpu {
         let index = RegisterIndex::from_opcode_second(opcode);
         let old_value = self.r(index);
         let value = (old_value >> 1) & (old_value & 0x80);
-        self.registers.clear_flags();
-        self.registers.set_carry_flag(old_value & 0b1 != 0);
-        self.registers.update_zero_flag(value);
+        self.registers.flags.clear();
+        self.registers.flags.set_carry(old_value & 0b1 != 0);
+        self.registers.flags.update_zero(value);
         self.set_r(index, value);
     }
 
@@ -871,26 +898,26 @@ impl Cpu {
         let index = RegisterIndex::from_opcode_second(opcode);
         let old_value = self.r(index);
         let value = old_value >> 1;
-        self.registers.clear_flags();
-        self.registers.set_carry_flag(old_value & 0b1 != 0);
-        self.registers.update_zero_flag(value);
+        self.registers.flags.clear();
+        self.registers.flags.set_carry(old_value & 0b1 != 0);
+        self.registers.flags.update_zero(value);
         self.set_r(index, value);
     }
 
     fn swap(&mut self, opcode: u8) {
         let index = RegisterIndex::from_opcode_second(opcode);
         let value = self.r(index).rotate_left(4);
-        self.registers.clear_flags();
-        self.registers.update_zero_flag(value);
+        self.registers.flags.clear();
+        self.registers.flags.update_zero(value);
         self.set_r(index, value);
     }
 
     fn bit(&mut self, opcode: u8) {
         let index = RegisterIndex::from_opcode_second(opcode);
-        self.registers.set_negative_flag(false);
-        self.registers.set_half_carry_flag(true);
-        let bit_test =  self.r(index) & (1 << ((opcode >> 3) & 0b111));
-        self.registers.update_zero_flag(bit_test);
+        self.registers.flags.set_negative(false);
+        self.registers.flags.set_half_carry(true);
+        let bit_test = self.r(index) & (1 << ((opcode >> 3) & 0b111));
+        self.registers.flags.update_zero(bit_test);
     }
 
     fn res(&mut self, opcode: u8) {
