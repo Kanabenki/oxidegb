@@ -138,6 +138,7 @@ struct Registers {
     a: u8,
     sp: u16,
     pc: u16,
+    ime: bool,
 }
 
 impl Registers {
@@ -235,11 +236,13 @@ pub struct Cpu {
 }
 
 impl MemoryOps for Cpu {
-    fn read_byte(&self, address: u16) -> u8 {
+    fn read_byte(&mut self, address: u16) -> u8 {
+        self.cycles_count += 4;
         self.mmu.read_byte(address)
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
+        self.cycles_count += 4;
         self.mmu.write_byte(address, value);
     }
 }
@@ -286,7 +289,7 @@ impl Cpu {
         u16::from_be_bytes([upper, lower])
     }
 
-    fn r(&self, index: RegisterIndex) -> u8 {
+    fn r(&mut self, index: RegisterIndex) -> u8 {
         if index.0 == 6 {
             self.read_byte(self.registers.hl())
         } else {
@@ -345,8 +348,8 @@ impl Cpu {
 
     fn ld_r_r(&mut self, opcode: u8) {
         let target_index = RegisterIndex::from_opcode_first(opcode);
-        let value_index = RegisterIndex::from_opcode_second(opcode);
-        self.set_r(target_index, self.r(value_index));
+        let value = self.r(RegisterIndex::from_opcode_second(opcode));
+        self.set_r(target_index, value);
     }
 
     fn ld_r_u8(&mut self, opcode: u8) {
@@ -605,8 +608,8 @@ impl Cpu {
     }
 
     fn and_a_r(&mut self, opcode: u8) {
-        let index = RegisterIndex::from_opcode_second(opcode);
-        self.and_a_generic(self.r(index));
+        let value = self.r(RegisterIndex::from_opcode_second(opcode));
+        self.and_a_generic(value);
     }
 
     fn and_a_u8(&mut self, _opcode: u8) {
@@ -621,8 +624,8 @@ impl Cpu {
     }
 
     fn or_a_r(&mut self, opcode: u8) {
-        let index = RegisterIndex::from_opcode_second(opcode);
-        self.or_a_generic(self.r(index));
+        let value = self.r(RegisterIndex::from_opcode_second(opcode));
+        self.or_a_generic(value);
     }
 
     fn or_a_u8(&mut self, _opcode: u8) {
@@ -637,8 +640,8 @@ impl Cpu {
     }
 
     fn xor_a_r(&mut self, opcode: u8) {
-        let index = RegisterIndex::from_opcode_second(opcode);
-        self.xor_a_generic(self.r(index));
+        let value = self.r(RegisterIndex::from_opcode_second(opcode));
+        self.xor_a_generic(value);
     }
 
     fn xor_a_u8(&mut self, opcode: u8) {
@@ -659,8 +662,8 @@ impl Cpu {
     }
 
     fn cp_a_r(&mut self, opcode: u8) {
-        let index = RegisterIndex::from_opcode_second(opcode);
-        self.cp_a_generic(self.r(index));
+        let value = self.r(RegisterIndex::from_opcode_second(opcode));
+        self.cp_a_generic(value);
     }
 
     fn cp_a_u8(&mut self, _opcode: u8) {
@@ -812,11 +815,11 @@ impl Cpu {
     // Interrupt operations.
 
     fn ei(&mut self, _opcode: u8) {
-        todo!()
+        self.registers.ime = true;
     }
 
     fn di(&mut self, _opcode: u8) {
-        todo!()
+        self.registers.ime = false;
     }
 
     // CB prefixed operations.

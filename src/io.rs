@@ -1,8 +1,8 @@
 use crate::mmu::MemoryOps;
 
-pub struct Ppu {}
+pub struct Io {}
 
-impl MemoryOps for Ppu {
+impl MemoryOps for Io {
     fn read_byte(&mut self, address: u16) -> u8 {
         todo!()
     }
