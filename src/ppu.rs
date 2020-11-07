@@ -2,12 +2,16 @@ use crate::mmu::MemoryOps;
 
 pub struct Ppu {}
 
-impl MemoryOps for Ppu {
-    fn read_byte(&mut self, address: u16) -> u8 {
-        todo!()
+impl Ppu {
+    pub fn read_vram(&self, address: u16) -> u8 {
+        0
     }
 
-    fn write_byte(&mut self, address: u16, value: u8) {
-        todo!()
+    pub fn write_vram(&self, address: u16, value: u8) {}
+
+    pub fn read_oam(&self, address: u16) -> u8 {
+        0
     }
+
+    pub fn write_oam(&self, address: u16, value: u8) {}
 }

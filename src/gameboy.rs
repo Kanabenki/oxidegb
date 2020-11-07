@@ -1,11 +1,11 @@
-use crate::cpu::Cpu;
+use crate::{cpu::Cpu, error::Error};
 
 pub struct Gameboy {
     cpu: Cpu,
 }
 
 impl Gameboy {
-    pub fn new() -> Self {
-        Self { cpu: Cpu::new() }
+    pub fn new() -> Result<Self, Error> {
+        Ok(Self { cpu: Cpu::new()? })
     }
 }

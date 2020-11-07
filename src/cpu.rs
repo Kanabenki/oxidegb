@@ -1,17 +1,21 @@
 use std::{num::Wrapping as Wr, primitive::u16};
 
-use crate::mmu::{MemoryOps, Mmu};
 use flagset::{flags, FlagSet};
+
+use crate::{
+    error::Error,
+    mmu::{MemoryOps, Mmu},
+};
 
 #[derive(Debug, Copy, Clone)]
 struct RegisterIndex(u8);
 
 impl RegisterIndex {
-    fn from_opcode_first(opcode: u8) -> Self {
+    const fn from_opcode_first(opcode: u8) -> Self {
         Self((opcode >> 3) & 0b11)
     }
 
-    fn from_opcode_second(opcode: u8) -> Self {
+    const fn from_opcode_second(opcode: u8) -> Self {
         Self(opcode & 0b11)
     }
 }
@@ -20,7 +24,7 @@ impl RegisterIndex {
 struct DoubleRegisterIndex(u8);
 
 impl DoubleRegisterIndex {
-    fn from_opcode(opcode: u8) -> Self {
+    const fn from_opcode(opcode: u8) -> Self {
         Self((opcode >> 4) & 0b11)
     }
 }
@@ -268,7 +272,7 @@ impl Cpu {
         Self::ldh_a_mu8, Self::pop_af,    Self::ldh_a_mc,    Self::di,      Self::ill,         Self::push_af, Self::or_a_u8,  Self::rst,     Self::ld_hl_spu8, Self::ld_sp_hl,  Self::ld_a_mu16,   Self::ei,        Self::ill,         Self::ill,      Self::cp_a_u8,  Self::rst
         ];
 
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, Error> {
         todo!()
     }
 

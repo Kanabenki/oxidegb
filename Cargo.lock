@@ -294,6 +294,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
+name = "enum_dispatch"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15b748aeb1b8c58d317739aa3171a2752ca3e76b8077c13dc748f327aebc0a72"
+dependencies = [
+ "once_cell",
+ "proc-macro2 1.0.24",
+ "quote 1.0.7",
+ "syn",
+]
+
+[[package]]
 name = "flagset"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -928,6 +940,7 @@ dependencies = [
 name = "oxidegb"
 version = "0.1.0"
 dependencies = [
+ "enum_dispatch",
  "flagset",
  "pixels",
  "winit",
