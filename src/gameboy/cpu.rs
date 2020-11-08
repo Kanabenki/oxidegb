@@ -240,7 +240,7 @@ enum ExecutionState {
 
 pub struct Cpu {
     registers: Registers,
-    mmu: Mmu,
+    pub(super) mmu: Mmu,
     cycles_count: u32,
     execution_state: ExecutionState,
 }
@@ -308,7 +308,7 @@ impl Cpu {
         if index.0 == 6 {
             self.read_byte(self.registers.hl())
         } else {
-            self.r(index)
+            self.registers.r(index)
         }
     }
 
@@ -316,7 +316,7 @@ impl Cpu {
         if index.0 == 6 {
             self.write_byte(self.registers.hl(), value);
         } else {
-            self.set_r(index, value);
+            self.registers.set_r(index, value);
         }
     }
 
@@ -659,7 +659,7 @@ impl Cpu {
         self.xor_a_generic(value);
     }
 
-    fn xor_a_u8(&mut self, opcode: u8) {
+    fn xor_a_u8(&mut self, _opcode: u8) {
         let value = self.fetch_byte_pc();
         self.xor_a_generic(value);
     }
@@ -822,7 +822,7 @@ impl Cpu {
         self.registers.set_rr(index, value);
     }
 
-    fn pop_af(&mut self, opcode: u8) {
+    fn pop_af(&mut self, _opcode: u8) {
         let value = self.pop_stack();
         self.registers.set_af(value);
     }

@@ -94,13 +94,13 @@ impl Mapper for RomOnly {
         rom[address as usize]
     }
 
-    fn write_rom(&mut self, rom: &mut [u8], address: u16, value: u8) {}
+    fn write_rom(&mut self, _rom: &mut [u8], _address: u16, _value: u8) {}
 
-    fn read_ram(&mut self, ram: &[u8], address: u16) -> u8 {
+    fn read_ram(&mut self, _ram: &[u8], _address: u16) -> u8 {
         0xFF
     }
 
-    fn write_ram(&mut self, rom: &mut [u8], address: u16, value: u8) {}
+    fn write_ram(&mut self, _rom: &mut [u8], _address: u16, _value: u8) {}
 }
 
 #[enum_dispatch]
@@ -120,6 +120,9 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
+    pub const BOOTROM_START: u16 = 0x0000;
+    pub const BOOTROM_END: u16 = 0x0100;
+
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
         let (header, mapper) = Header::parse(&rom)?;
         let ram = vec![0; header.ram_size as usize];
@@ -143,14 +146,24 @@ impl Cartridge {
 
     pub fn read_rom(&mut self, address: u16) -> u8 {
         match &self.bootrom {
-            Some(bootrom) if self.bootrom_enabled && address <= 0x0100 => bootrom[address as usize],
+            Some(bootrom)
+                if self.bootrom_enabled
+                    && Self::BOOTROM_START <= address
+                    && address <= Self::BOOTROM_END =>
+            {
+                bootrom[address as usize]
+            }
             _ => self.mapper.read_rom(&self.rom, address),
         }
     }
 
     pub fn write_rom(&mut self, address: u16, value: u8) {
         match &mut self.bootrom {
-            Some(bootrom) if self.bootrom_enabled && address <= 0x0100 => {
+            Some(bootrom)
+                if self.bootrom_enabled
+                    && Self::BOOTROM_START <= address
+                    && address <= Self::BOOTROM_END =>
+            {
                 bootrom[address as usize] = value
             }
             _ => self.mapper.write_rom(&mut self.rom, address, value),

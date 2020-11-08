@@ -4,14 +4,25 @@ use crate::{
 };
 
 mod map {
-    pub const BOOTROM_START: u16 = 0x0000;
-    pub const BOOTROM_END: u16 = 0x0100;
     pub const ROM_START: u16 = 0x0000;
     pub const ROM_END: u16 = 0x7FFF;
     pub const VRAM_START: u16 = 0x8000;
     pub const VRAM_END: u16 = 0x9FFF;
-    pub const RAM_START: u16 = 0xA000;
-    pub const RAM_END: u16 = 0xbFFF;
+    pub const EXT_RAM_START: u16 = 0xA000;
+    pub const EXT_RAM_END: u16 = 0xBFFF;
+    pub const WRAM_START: u16 = 0xC000;
+    pub const WRAM_END: u16 = 0xDFFF;
+    pub const ECHO_WRAM_START: u16 = 0xE000;
+    pub const ECHO_WRAM_END: u16 = 0xFDFF;
+    pub const OAM_START: u16 = 0xFE00;
+    pub const OAM_END: u16 = 0xFE9F;
+    pub const UNUSED_START: u16 = 0xFEA0;
+    pub const UNUSED_END: u16 = 0xFEFF;
+    pub const IO_START: u16 = 0xFF00;
+    pub const IO_END: u16 = 0xFF7F;
+    pub const HRAM_START: u16 = 0xFF80;
+    pub const HRAM_END: u16 = 0xFFFE;
+    pub const IE: u16 = 0xFFFF;
 }
 
 pub trait MemoryOps {
@@ -33,18 +44,18 @@ pub trait MemoryOps {
 }
 
 pub struct Mmu {
-    work_ram: [u8; 8192],
-    high_ram: [u8; 126],
-    ppu: Ppu,
-    io: Io,
+    wram: [u8; 8192],
+    hram: [u8; 126],
+    pub(super) ppu: Ppu,
+    pub(super) io: Io,
     cartridge: Cartridge,
 }
 
 impl Mmu {
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
         Ok(Self {
-            work_ram: [0; 8192],
-            high_ram: [0; 126],
+            wram: [0; 8192],
+            hram: [0; 126],
             ppu: Ppu::new(),
             io: Io::new(),
             cartridge: Cartridge::new(rom, bootrom)?,
@@ -56,32 +67,34 @@ impl MemoryOps for Mmu {
     fn read_byte(&mut self, address: u16) -> u8 {
         use map::*;
         match address {
-            ROM_START..=ROM_END => self.cartridge.read_rom(address), // Cartridge ROM.
-            VRAM_START..=VRAM_END => self.ppu.read_vram(address),    // vram
-            RAM_START..=RAM_END => self.cartridge.read_ram(address), // card
-            0xC000..=0xDFFF => self.work_ram[(address & 0xFFF) as usize], // Work RAM.
-            0xE000..=0xFDFF => self.work_ram[(address & 0xFFF) as usize], // Echo work RAM.
-            0xFE00..=0xFE9F => self.ppu.read_oam(address),           // ppu
-            0xFEA0..=0xFEFF => 0,                                    // unusable ?
-            0xFF00..=0xFF7F => self.io.read(address),                // IO registers.
-            0xFF80..=0xFFFE => self.high_ram[(address & 0x7F) as usize], // High RAM.
-            0xFFFF => 0,
+            ROM_START..=ROM_END => self.cartridge.read_rom(address - ROM_START),
+            VRAM_START..=VRAM_END => self.ppu.read_vram(address - VRAM_START),
+            EXT_RAM_START..=EXT_RAM_END => self.cartridge.read_ram(address - EXT_RAM_START),
+            WRAM_START..=WRAM_END => self.wram[(address - WRAM_START) as usize],
+            ECHO_WRAM_START..=ECHO_WRAM_END => self.wram[(address - ECHO_WRAM_START) as usize],
+            OAM_START..=OAM_END => self.ppu.read_oam(address - OAM_START),
+            UNUSED_START..=UNUSED_END => 0xFF,
+            IO_START..=IO_END => self.io.read(address),
+            HRAM_START..=HRAM_END => self.hram[(address - HRAM_START) as usize],
+            IE => 0,
         }
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
         use map::*;
         match address {
-            ROM_START..=ROM_END => self.cartridge.write_rom(address, value), // card
-            VRAM_START..=VRAM_END => self.ppu.write_vram(address, value),    // vram
-            RAM_START..=RAM_END => self.cartridge.write_ram(address, value), // card
-            0xC000..=0xDFFF => self.work_ram[(address & 0xFFF) as usize] = value, // Work RAM.
-            0xE000..=0xFDFF => self.work_ram[(address & 0xFFF) as usize] = value, // Echo work RAM.
-            0xFE00..=0xFE9F => self.ppu.write_oam(address, value),           // ppu
-            0xFEA0..=0xFEFF => (),                                           // unusable ?
-            0xFF00..=0xFF7F => self.io.write(address, value),                // IO Registers.
-            0xFF80..=0xFFFE => self.high_ram[(address & 0x7F) as usize] = value, // High RAM.
-            0xFFFF => (),
+            ROM_START..=ROM_END => self.cartridge.write_rom(address - ROM_START, value),
+            VRAM_START..=VRAM_END => self.ppu.write_vram(address - VRAM_START, value),
+            EXT_RAM_START..=EXT_RAM_END => self.cartridge.write_ram(address - EXT_RAM_START, value),
+            WRAM_START..=WRAM_END => self.wram[(address - WRAM_START) as usize] = value,
+            ECHO_WRAM_START..=ECHO_WRAM_END => {
+                self.wram[(address - ECHO_WRAM_START) as usize] = value
+            }
+            OAM_START..=OAM_END => self.ppu.write_oam(address - OAM_START, value),
+            UNUSED_START..=UNUSED_END => (),
+            IO_START..=IO_END => self.io.write(address, value),
+            HRAM_START..=HRAM_END => self.hram[(address - HRAM_START) as usize] = value,
+            IE => (),
         }
     }
 }
