@@ -4,7 +4,7 @@ use flagset::{flags, FlagSet};
 
 use crate::{
     error::Error,
-    mmu::{MemoryOps, Mmu},
+    gameboy::mmu::{MemoryOps, Mmu},
 };
 
 #[derive(Debug, Copy, Clone)]

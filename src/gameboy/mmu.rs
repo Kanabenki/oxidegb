@@ -1,4 +1,7 @@
-use crate::{cartridge::Cartridge, error::Error, io::Io, ppu::Ppu};
+use crate::{
+    error::Error,
+    gameboy::{cartridge::Cartridge, io::Io, ppu::Ppu},
+};
 
 mod map {
     pub const BOOTROM_START: u16 = 0x0000;

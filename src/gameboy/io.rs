@@ -1,4 +1,4 @@
-use crate::mmu::MemoryOps;
+use crate::gameboy::mmu::MemoryOps;
 
 pub struct Io {}
 

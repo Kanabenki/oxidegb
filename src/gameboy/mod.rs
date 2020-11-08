@@ -1,4 +1,13 @@
-use crate::{cpu::Cpu, error::Error};
+mod buttons;
+mod cartridge;
+mod cpu;
+mod interrupts;
+mod io;
+mod mmu;
+mod ppu;
+
+use self::cpu::Cpu;
+use crate::error::Error;
 
 pub struct Gameboy {
     cpu: Cpu,
