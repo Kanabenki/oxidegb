@@ -43,7 +43,7 @@ enum FlagOp {
     Borrow,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 struct Flags(FlagSet<Flag>);
 
 impl Flags {
@@ -130,7 +130,7 @@ impl Flags {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 struct Registers {
     b: u8,
     c: u8,
@@ -146,6 +146,12 @@ struct Registers {
 }
 
 impl Registers {
+    fn new() -> Self {
+        Self {
+            ..Default::default()
+        }
+    }
+
     fn r(&self, index: RegisterIndex) -> u8 {
         match index.0 {
             0 => self.b,
@@ -272,11 +278,16 @@ impl Cpu {
         Self::ldh_a_mu8, Self::pop_af,    Self::ldh_a_mc,    Self::di,      Self::ill,         Self::push_af, Self::or_a_u8,  Self::rst,     Self::ld_hl_spu8, Self::ld_sp_hl,  Self::ld_a_mu16,   Self::ei,        Self::ill,         Self::ill,      Self::cp_a_u8,  Self::rst
         ];
 
-    pub fn new() -> Result<Self, Error> {
-        todo!()
+    pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
+        Ok(Self {
+            registers: Registers::new(),
+            mmu: Mmu::new(rom, bootrom)?,
+            cycles_count: 0,
+            execution_state: ExecutionState::Continue,
+        })
     }
 
-    fn tick(&mut self) {
+    pub fn tick(&mut self) {
         let opcode = self.fetch_byte_pc();
         Self::OPCODE_TABLE[opcode as usize](self, opcode);
     }

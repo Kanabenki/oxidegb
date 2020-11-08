@@ -1,4 +1,4 @@
-use crate::{cartridge::Cartridge, io::Io, ppu::Ppu};
+use crate::{cartridge::Cartridge, error::Error, io::Io, ppu::Ppu};
 
 mod map {
     pub const BOOTROM_START: u16 = 0x0000;
@@ -30,11 +30,23 @@ pub trait MemoryOps {
 }
 
 pub struct Mmu {
-    work_ram: [u8; 4096],
+    work_ram: [u8; 8192],
     high_ram: [u8; 126],
     ppu: Ppu,
     io: Io,
     cartridge: Cartridge,
+}
+
+impl Mmu {
+    pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
+        Ok(Self {
+            work_ram: [0; 8192],
+            high_ram: [0; 126],
+            ppu: Ppu::new(),
+            io: Io::new(),
+            cartridge: Cartridge::new(rom, bootrom)?,
+        })
+    }
 }
 
 impl MemoryOps for Mmu {

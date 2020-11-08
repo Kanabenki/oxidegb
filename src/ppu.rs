@@ -3,6 +3,10 @@ use crate::mmu::MemoryOps;
 pub struct Ppu {}
 
 impl Ppu {
+    pub fn new() -> Self {
+        Self {}
+    }
+
     pub fn read_vram(&self, address: u16) -> u8 {
         0
     }

@@ -1,14 +1,14 @@
-use std::ffi::CStr;
-
 use enum_dispatch::enum_dispatch;
 
 use crate::error::Error;
 
+#[derive(Debug)]
 enum Destination {
     Japanese,
     NonJapanese,
 }
 
+#[derive(Debug)]
 struct Header {
     title: String,
     rom_size: u32,
@@ -21,13 +21,17 @@ struct Header {
 impl Header {
     fn parse(rom_bytes: &[u8]) -> Result<(Self, MapperKind), Error> {
         if rom_bytes.len() < 0x014F {
-            return Err(Error::InvalidRomHeader);
+            return Err(Error::InvalidRomHeader("Header is too short".into()));
         }
-        let title = CStr::from_bytes_with_nul(&rom_bytes[0x0134..=0x143])
-            .or(Err(Error::InvalidRomHeader))?
-            .to_str()
-            .or(Err(Error::InvalidRomHeader))?
-            .to_owned();
+
+        let title = String::from_utf8(
+            rom_bytes[0x0134..=0x143]
+                .splitn(2, |byte| *byte == 0)
+                .next()
+                .unwrap()
+                .to_owned(),
+        )
+        .or(Err(Error::InvalidRomHeader("Could not parse title".into())))?;
 
         let mapper = match rom_bytes[0x147] {
             0x00 => MapperKind::RomOnly(RomOnly),
@@ -39,7 +43,7 @@ impl Header {
             0x52 => 72,
             0x53 => 80,
             0x54 => 96,
-            _ => return Err(Error::InvalidRomHeader),
+            _ => return Err(Error::InvalidRomHeader("Invalid rom bank count".into())),
         };
 
         let rom_size = 0x4000 * rom_bank_count;
@@ -51,13 +55,13 @@ impl Header {
             0x03 => (4, 0x2000 * 4),
             0x04 => (16, 0x2000 * 16),
             0x05 => (8, 0x2000 * 8),
-            _ => return Err(Error::InvalidRomHeader),
+            _ => return Err(Error::InvalidRomHeader("Invalid ram bank count".into())),
         };
 
         let destination = match rom_bytes[0x14A] {
             0x00 => Destination::Japanese,
             0x01 => Destination::NonJapanese,
-            _ => return Err(Error::InvalidRomHeader),
+            _ => return Err(Error::InvalidRomHeader("Invalid destination".into())),
         };
 
         Ok((
@@ -82,6 +86,7 @@ trait Mapper {
     fn write_ram(&mut self, rom: &mut [u8], address: u16, value: u8);
 }
 
+#[derive(Debug)]
 struct RomOnly;
 
 impl Mapper for RomOnly {
@@ -92,19 +97,19 @@ impl Mapper for RomOnly {
     fn write_rom(&mut self, rom: &mut [u8], address: u16, value: u8) {}
 
     fn read_ram(&mut self, ram: &[u8], address: u16) -> u8 {
-        todo!()
+        0xFF
     }
 
-    fn write_ram(&mut self, rom: &mut [u8], address: u16, value: u8) {
-        todo!()
-    }
+    fn write_ram(&mut self, rom: &mut [u8], address: u16, value: u8) {}
 }
 
 #[enum_dispatch]
+#[derive(Debug)]
 enum MapperKind {
     RomOnly(RomOnly),
 }
 
+#[derive(Debug)]
 pub struct Cartridge {
     header: Header,
     mapper: MapperKind,
@@ -112,12 +117,28 @@ pub struct Cartridge {
     pub bootrom_enabled: bool,
     rom: Vec<u8>,
     ram: Vec<u8>,
-    has_battery: bool,
 }
 
 impl Cartridge {
-    fn new(rom_bytes: Vec<u8>, boot_rom_bytes: Option<Vec<u8>>) -> Result<Self, Error> {
-        todo!()
+    pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
+        let (header, mapper) = Header::parse(&rom)?;
+        let ram = vec![0; header.ram_size as usize];
+        let bootrom_enabled = bootrom.is_some();
+        if let Some(bootrom) = &bootrom {
+            if bootrom.len() != 0x100 {
+                // TODO Checksum ?
+                return Err(Error::InvalidBootRom);
+            }
+        }
+
+        Ok(Self {
+            header,
+            mapper,
+            bootrom,
+            bootrom_enabled,
+            rom,
+            ram,
+        })
     }
 
     pub fn read_rom(&mut self, address: u16) -> u8 {
