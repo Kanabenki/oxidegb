@@ -31,7 +31,7 @@ impl Header {
                 .unwrap()
                 .to_owned(),
         )
-        .or(Err(Error::InvalidRomHeader("Could not parse title".into())))?;
+        .map_err(|_| Error::InvalidRomHeader("Could not parse title".into()))?;
 
         let mapper = match rom_bytes[0x147] {
             0x00 => MapperKind::RomOnly(RomOnly),
@@ -120,7 +120,6 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub const BOOTROM_START: u16 = 0x0000;
     pub const BOOTROM_END: u16 = 0x0100;
 
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
@@ -146,11 +145,7 @@ impl Cartridge {
 
     pub fn read_rom(&mut self, address: u16) -> u8 {
         match &self.bootrom {
-            Some(bootrom)
-                if self.bootrom_enabled
-                    && Self::BOOTROM_START <= address
-                    && address <= Self::BOOTROM_END =>
-            {
+            Some(bootrom) if self.bootrom_enabled && address <= Self::BOOTROM_END => {
                 bootrom[address as usize]
             }
             _ => self.mapper.read_rom(&self.rom, address),
@@ -159,11 +154,7 @@ impl Cartridge {
 
     pub fn write_rom(&mut self, address: u16, value: u8) {
         match &mut self.bootrom {
-            Some(bootrom)
-                if self.bootrom_enabled
-                    && Self::BOOTROM_START <= address
-                    && address <= Self::BOOTROM_END =>
-            {
+            Some(bootrom) if self.bootrom_enabled && address <= Self::BOOTROM_END => {
                 bootrom[address as usize] = value
             }
             _ => self.mapper.write_rom(&mut self.rom, address, value),
