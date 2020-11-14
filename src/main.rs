@@ -15,7 +15,7 @@ struct Emulator {
     event_loop: Option<EventLoop<()>>,
     window: Window,
     pixels: Pixels<Window>,
-    _gameboy: Gameboy,
+    gameboy: Gameboy,
     _scale: u32,
 }
 
@@ -41,14 +41,14 @@ impl Emulator {
             Pixels::new(160, 144, surface_texture)?
         };
 
-        let _gameboy = Gameboy::new(rom, bootrom)?;
+        let gameboy = Gameboy::new(rom, bootrom)?;
         let event_loop = Some(event_loop);
 
         Ok(Self {
             event_loop,
             window,
             pixels,
-            _gameboy,
+            gameboy,
             _scale: scale,
         })
     }
@@ -58,7 +58,6 @@ impl Emulator {
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
 
-            //self.gameboy.tick();
             match event {
                 Event::RedrawRequested(_) => {
                     self.pixels
@@ -75,7 +74,10 @@ impl Emulator {
                     window_id,
                     event: WindowEvent::CloseRequested,
                 } if window_id == self.window.id() => *control_flow = ControlFlow::Exit,
-                Event::MainEventsCleared => self.window.request_redraw(),
+                Event::MainEventsCleared => {
+                    self.gameboy.tick();
+                    self.window.request_redraw();
+                }
                 _ => (),
             }
         })

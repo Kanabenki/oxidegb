@@ -1,5 +1,9 @@
+mod mbc1;
+mod rom_only;
+
 use enum_dispatch::enum_dispatch;
 
+use self::{mbc1::Mbc1, rom_only::RomOnly};
 use crate::error::Error;
 
 #[derive(Debug)]
@@ -33,16 +37,8 @@ impl Header {
         )
         .map_err(|_| Error::InvalidRomHeader("Could not parse title".into()))?;
 
-        let mapper = match rom_bytes[0x147] {
-            0x00 => MapperKind::RomOnly(RomOnly),
-            _ => return Err(Error::UnsupportedMapper),
-        };
-
         let rom_bank_count = match rom_bytes[0x148] {
             rom_bank_byte @ 0x00..=0x08 => 2 << rom_bank_byte,
-            0x52 => 72,
-            0x53 => 80,
-            0x54 => 96,
             _ => return Err(Error::InvalidRomHeader("Invalid rom bank count".into())),
         };
 
@@ -50,12 +46,18 @@ impl Header {
 
         let (ram_bank_count, ram_size) = match rom_bytes[0x149] {
             0x00 => (0, 0),
-            0x01 => (1, 0x0800),
-            0x02 => (1, 0x2000),
+            0x01 => (1, 0x2000),
+            0x02 => (1, 0x0800),
             0x03 => (4, 0x2000 * 4),
             0x04 => (16, 0x2000 * 16),
             0x05 => (8, 0x2000 * 8),
             _ => return Err(Error::InvalidRomHeader("Invalid ram bank count".into())),
+        };
+
+        let mapper = match rom_bytes[0x147] {
+            0x00 => MapperKind::RomOnly(RomOnly),
+            0x01 => MapperKind::Mbc1(Mbc1::new(rom_bank_count as u16, false, false)),
+            _ => return Err(Error::UnsupportedMapper),
         };
 
         let destination = match rom_bytes[0x14A] {
@@ -86,27 +88,11 @@ trait Mapper {
     fn write_ram(&mut self, rom: &mut [u8], address: u16, value: u8);
 }
 
-#[derive(Debug)]
-struct RomOnly;
-
-impl Mapper for RomOnly {
-    fn read_rom(&mut self, rom: &[u8], address: u16) -> u8 {
-        rom[address as usize]
-    }
-
-    fn write_rom(&mut self, _rom: &mut [u8], _address: u16, _value: u8) {}
-
-    fn read_ram(&mut self, _ram: &[u8], _address: u16) -> u8 {
-        0xFF
-    }
-
-    fn write_ram(&mut self, _rom: &mut [u8], _address: u16, _value: u8) {}
-}
-
 #[enum_dispatch]
 #[derive(Debug)]
 enum MapperKind {
     RomOnly(RomOnly),
+    Mbc1(Mbc1),
 }
 
 #[derive(Debug)]

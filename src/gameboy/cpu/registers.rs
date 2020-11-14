@@ -149,6 +149,23 @@ impl Registers {
         }
     }
 
+    pub fn new_post_bootrom() -> Self {
+        let flags = Flags(Flag::C | Flag::H | Flag::Z);
+        Self {
+            b: 0x00,
+            c: 0x13,
+            d: 0x00,
+            e: 0xD8,
+            h: 0x01,
+            l: 0x4D,
+            flags,
+            a: 0x01,
+            sp: 0xFFFE,
+            pc: 0x100,
+            ime: true,
+        }
+    }
+
     pub fn r(&self, index: RegisterIndex) -> u8 {
         match index.0 {
             0 => self.b,

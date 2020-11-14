@@ -81,6 +81,9 @@ impl MemoryOps for Mmu {
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
+        if address == 0xFF01 {
+            println!("{:x}", value);
+        }
         use map::*;
         match address {
             ROM_START..=ROM_END => self.cartridge.write_rom(address - ROM_START, value),
