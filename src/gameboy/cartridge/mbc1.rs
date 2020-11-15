@@ -59,12 +59,13 @@ impl Mbc1 {
     fn rom_address_high(&self, address: u16) -> usize {
         match self.bank_mode {
             BankMode::RomHighBits => {
-                address as usize
+                address as usize - Self::ROM_BANK_SIZE
                     + ((self.mode_register << 5 | self.current_rom_bank) as usize
                         * Self::ROM_BANK_SIZE)
             }
             BankMode::Ram => {
-                address as usize + self.current_rom_bank as usize * Self::ROM_BANK_SIZE
+                address as usize - Self::ROM_BANK_SIZE
+                    + self.current_rom_bank as usize * Self::ROM_BANK_SIZE
             }
         }
     }

@@ -19,7 +19,14 @@ mod map {
     pub const UNUSED_START: u16 = 0xFEA0;
     pub const UNUSED_END: u16 = 0xFEFF;
     pub const IO_START: u16 = 0xFF00;
-    pub const IO_END: u16 = 0xFF7F;
+    pub const IO_END: u16 = 0xFF07;
+    pub const SPU_REGISTERS_START: u16 = 0xFF08;
+    pub const SPU_REGISTERS_END: u16 = 0xFF3F;
+    pub const PPU_REGISTERS_START: u16 = 0xFF40;
+    pub const PPU_REGISTERS_END: u16 = 0xFF4F;
+    pub const DISABLE_BOOTROM: u16 = 0xFF50;
+    pub const CGB_REGISTERS_START: u16 = 0xFF51;
+    pub const CGB_REGISTERS_END: u16 = 0xFF7F;
     pub const HRAM_START: u16 = 0xFF80;
     pub const HRAM_END: u16 = 0xFFFE;
     pub const IE: u16 = 0xFFFF;
@@ -75,6 +82,10 @@ impl MemoryOps for Mmu {
             OAM_START..=OAM_END => self.ppu.read_oam(address - OAM_START),
             UNUSED_START..=UNUSED_END => 0xFF,
             IO_START..=IO_END => self.io.read(address),
+            SPU_REGISTERS_START..=SPU_REGISTERS_END => 0xFF,
+            PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.read_registers(address),
+            DISABLE_BOOTROM => 0xFF,
+            CGB_REGISTERS_START..=CGB_REGISTERS_END => 0xFF,
             HRAM_START..=HRAM_END => self.hram[(address - HRAM_START) as usize],
             IE => 0,
         }
@@ -96,6 +107,14 @@ impl MemoryOps for Mmu {
             OAM_START..=OAM_END => self.ppu.write_oam(address - OAM_START, value),
             UNUSED_START..=UNUSED_END => (),
             IO_START..=IO_END => self.io.write(address, value),
+            SPU_REGISTERS_START..=SPU_REGISTERS_END => {}
+            PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.write_registers(address, value),
+            DISABLE_BOOTROM => {
+                if value != 0 {
+                    self.cartridge.disable_bootrom()
+                }
+            }
+            CGB_REGISTERS_START..=CGB_REGISTERS_END => {}
             HRAM_START..=HRAM_END => self.hram[(address - HRAM_START) as usize] = value,
             IE => (),
         }

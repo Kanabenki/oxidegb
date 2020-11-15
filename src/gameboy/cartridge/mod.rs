@@ -129,6 +129,10 @@ impl Cartridge {
         })
     }
 
+    pub fn disable_bootrom(&mut self) {
+        self.bootrom_enabled = false;
+    }
+
     pub fn read_rom(&mut self, address: u16) -> u8 {
         match &self.bootrom {
             Some(bootrom) if self.bootrom_enabled && address <= Self::BOOTROM_END => {
