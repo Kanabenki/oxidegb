@@ -1,22 +1,22 @@
 #[derive(Debug, Copy, Clone)]
-pub struct Color([u8; 4]);
-
 enum TileMapRange {
-    Low,
-    High,
+    Low = 0,
+    High = 1,
 }
 
+#[derive(Debug, Copy, Clone)]
 enum TileDataAddressing {
-    Unsigned,
-    Signed,
+    Unsigned = 0,
+    Signed = 1,
 }
 
+#[derive(Debug, Copy, Clone)]
 enum SpriteSize {
-    S8x8,
-    S8x16,
+    S8x8 = 0,
+    S8x16 = 1,
 }
 
-struct LcdControl {
+pub struct LcdControl {
     lcd_enable: bool,
     window_tile_map: TileMapRange,
     window_enable: bool,
@@ -28,7 +28,7 @@ struct LcdControl {
 }
 
 impl LcdControl {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             lcd_enable: true,
             window_tile_map: TileMapRange::Low,
@@ -41,7 +41,17 @@ impl LcdControl {
         }
     }
 
-    fn set_value(&mut self, value: u8) {
+    pub fn value(&self) -> u8 {
+        (self.lcd_enable as u8) << 7
+            | (self.window_tile_map as u8) << 6
+            | (self.window_enable as u8) << 5
+            | (self.bg_window_addressing as u8) << 4
+            | (self.bg_tile_map as u8) << 3
+            | (self.obj_size as u8) << 2
+            | (self.bg_window_enable as u8)
+    }
+
+    pub fn set_value(&mut self, value: u8) {
         self.lcd_enable = value & (1 << 7) != 0;
         self.window_tile_map = if value & (1 << 6) == 0 {
             TileMapRange::Low
@@ -66,54 +76,5 @@ impl LcdControl {
         };
         self.obj_enable = value & (1 << 1) != 0;
         self.bg_window_enable = value & 1 != 0;
-    }
-}
-
-pub struct Ppu {
-    screen: [Color; 166 * 144],
-    vram: [u8; 8192],
-    oam: [u8; 0x9F],
-    lcdc: LcdControl,
-}
-
-impl Ppu {
-    pub fn new() -> Self {
-        Self {
-            screen: [Color([0, 0, 0, 0]); 166 * 144],
-            vram: [0; 8192],
-            oam: [0; 0x9F],
-            lcdc: LcdControl::new(),
-        }
-    }
-
-    pub fn screen(&self) -> &[Color; 166 * 144] {
-        &self.screen
-    }
-
-    pub fn read_vram(&self, address: u16) -> u8 {
-        self.vram[address as usize]
-    }
-
-    pub fn write_vram(&mut self, address: u16, value: u8) {
-        self.vram[address as usize] = value;
-    }
-
-    pub fn read_oam(&self, address: u16) -> u8 {
-        self.oam[address as usize]
-    }
-
-    pub fn write_oam(&mut self, address: u16, value: u8) {
-        self.oam[address as usize] = value;
-    }
-
-    pub fn read_registers(&self, _address: u16) -> u8 {
-        todo!()
-    }
-
-    pub fn write_registers(&mut self, address: u16, value: u8) {
-        match address {
-            0xFF40 => self.lcdc.set_value(value),
-            _ => panic!("Tried to write ppu register at invalid address"),
-        }
     }
 }
