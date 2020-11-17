@@ -1,7 +1,7 @@
 use std::convert::{TryFrom, TryInto};
 
 #[derive(Debug, Copy, Clone)]
-enum Color {
+pub enum Color {
     White = 0,
     LightGray = 1,
     DarkGray = 2,
