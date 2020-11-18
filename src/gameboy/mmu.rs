@@ -68,10 +68,16 @@ impl Mmu {
             cartridge: Cartridge::new(rom, bootrom)?,
         })
     }
+
+    fn tick(&mut self) {
+        self.ppu.tick();
+    }
 }
 
 impl MemoryOps for Mmu {
     fn read_byte(&mut self, address: u16) -> u8 {
+        self.tick();
+
         use map::*;
         match address {
             ROM_START..=ROM_END => self.cartridge.read_rom(address - ROM_START),
@@ -92,9 +98,8 @@ impl MemoryOps for Mmu {
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
-        if address == 0xFF01 {
-            println!("{:x}", value);
-        }
+        self.tick();
+
         use map::*;
         match address {
             ROM_START..=ROM_END => self.cartridge.write_rom(address - ROM_START, value),

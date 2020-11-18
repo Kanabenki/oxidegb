@@ -1,9 +1,9 @@
 #[derive(Debug, Copy, Clone)]
 pub enum Mode {
     HBlank = 0,
-    _VBlank = 1,
+    VBlank = 1,
     OamSearch = 2,
-    _Datatransfer = 3,
+    PixelTransfer = 3,
 }
 
 impl Default for Mode {
@@ -19,7 +19,7 @@ pub struct LcdStatus {
     vblank_interrupt_enabled: bool,
     hblank_interrupt_enabled: bool,
     lyc_coincidence: bool,
-    mode: Mode,
+    pub mode: Mode,
 }
 
 impl LcdStatus {

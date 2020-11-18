@@ -1,30 +1,39 @@
 #[derive(Debug, Copy, Clone)]
-enum TileMapRange {
+pub enum TileMapRange {
     Low = 0,
     High = 1,
 }
 
 #[derive(Debug, Copy, Clone)]
-enum TileDataAddressing {
+pub enum TileDataAddressing {
     Unsigned = 0,
     Signed = 1,
 }
 
 #[derive(Debug, Copy, Clone)]
-enum SpriteSize {
+pub enum SpriteSize {
     S8x8 = 0,
     S8x16 = 1,
 }
 
+impl SpriteSize {
+    pub fn height(&self) -> u8 {
+        match self {
+            SpriteSize::S8x8 => 8,
+            SpriteSize::S8x16 => 16,
+        }
+    }
+}
+
 pub struct LcdControl {
-    lcd_enable: bool,
-    window_tile_map: TileMapRange,
-    window_enable: bool,
-    bg_window_addressing: TileDataAddressing,
-    bg_tile_map: TileMapRange,
-    obj_size: SpriteSize,
-    obj_enable: bool,
-    bg_window_enable: bool,
+    pub lcd_enable: bool,
+    pub window_tile_map: TileMapRange,
+    pub window_enable: bool,
+    pub bg_window_addressing: TileDataAddressing,
+    pub bg_tile_map: TileMapRange,
+    pub obj_size: SpriteSize,
+    pub obj_enable: bool,
+    pub bg_window_enable: bool,
 }
 
 impl LcdControl {

@@ -1,66 +1,27 @@
 mod lcd_control;
 mod lcd_status;
 mod palette;
+mod pixel_transfer;
+mod sprite;
 
-use self::{lcd_control::LcdControl, lcd_status::LcdStatus, palette::Palette};
+use self::{
+    lcd_control::LcdControl,
+    lcd_status::{LcdStatus, Mode},
+    palette::Palette,
+    pixel_transfer::PixelFifo,
+};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Color([u8; 4]);
 
-struct PixelFifo {
-    _fifo: [palette::Color; 16],
-    _start: usize,
-    _end: usize,
-}
-
-impl PixelFifo {
-    const SIZE: usize = 16;
-
-    fn new() -> Self {
-        Self {
-            _fifo: [palette::Color::White; Self::SIZE],
-            _start: 0,
-            _end: 0,
-        }
-    }
-
-    fn _size(&self) -> usize {
-        (self._end as isize - self._start as isize
-            + (if self._start > self._end {
-                Self::SIZE as isize
-            } else {
-                0
-            })) as usize
-    }
-
-    fn _push_line(&mut self, colors: &[palette::Color; 8]) -> bool {
-        if self._size() <= 8 {
-            for (i, color) in colors.iter().cloned().enumerate() {
-                self._fifo[self._start + (i % Self::SIZE)] = color;
-            }
-            self._end = (self._end + 1) % 16;
-            true
-        } else {
-            false
-        }
-    }
-
-    fn _pop(&mut self) -> Option<palette::Color> {
-        if self._start != self._end {
-            let color = Some(self._fifo[self._start]);
-            self._start = (self._start + 1) % Self::SIZE;
-            color
-        } else {
-            None
-        }
-    }
-}
-
 pub struct Ppu {
     screen: [Color; 166 * 144],
     vram: [u8; 8192],
-    oam: [u8; 0x9F],
-    _pixel_fifo: PixelFifo,
+    oam: [u8; Self::OAM_SIZE],
+    bg_pixel_fifo: PixelFifo,
+    obj_pixel_fifo: PixelFifo,
+    visible_sprites: Vec<sprite::Attributes>,
+    oam_index: usize,
     lcdc: LcdControl,
     stat: LcdStatus,
     bg_palette: Palette,
@@ -68,13 +29,22 @@ pub struct Ppu {
     obj_palette_1: Palette,
     scroll_y: u8,
     scroll_x: u8,
+    x_pos: u8,
     line_y: u8,
     line_y_compare: u8,
     window_y: u8,
     window_x: u8,
+    line_cycles_count: u8,
 }
 
 impl Ppu {
+    const OAM_SIZE: usize = 0x9F;
+
+    const LCD_SIZE_X: u8 = 166;
+    const LCD_SIZE_Y: u8 = 144;
+
+    const LAST_VISIBLE_LINE: u8 = Self::LCD_SIZE_Y - 1;
+
     const LCDC: u16 = 0xFF40;
     const STAT: u16 = 0xFF41;
     const SCROLL_Y: u16 = 0xFF42;
@@ -89,12 +59,20 @@ impl Ppu {
 
     const _WINDOW_X_OFFSET: u8 = 7;
 
+    const CYCLES_PER_LINE: u8 = 114;
+    const LINES_PER_FRAME: u8 = 154;
+
+    const MAX_VISIBLE_SPRITES: usize = 10;
+
     pub fn new() -> Self {
         Self {
             screen: [Color([0, 0, 0, 0]); 166 * 144],
             vram: [0; 8192],
-            oam: [0; 0x9F],
-            _pixel_fifo: PixelFifo::new(),
+            oam: [0; Self::OAM_SIZE],
+            bg_pixel_fifo: PixelFifo::new(),
+            obj_pixel_fifo: PixelFifo::new(),
+            visible_sprites: Vec::with_capacity(10),
+            oam_index: 0,
             lcdc: LcdControl::new(),
             stat: LcdStatus::new(),
             bg_palette: Palette::new(),
@@ -102,31 +80,94 @@ impl Ppu {
             obj_palette_1: Palette::new(),
             scroll_x: 0,
             scroll_y: 0,
+            x_pos: 0,
             line_y: 0,
             line_y_compare: 0,
             window_y: 0,
             window_x: 0,
+            line_cycles_count: 0,
         }
     }
 
-    pub fn screen(&self) -> &[Color; 166 * 144] {
+    pub fn tick(&mut self) {
+        match self.stat.mode {
+            Mode::OamSearch => {
+                let i = self.oam_index;
+                let sprite = sprite::Attributes::parse([
+                    self.oam[i],
+                    self.oam[i + 1],
+                    self.oam[i + 2],
+                    self.oam[i + 3],
+                ]);
+
+                if self.visible_sprites.len() < Self::MAX_VISIBLE_SPRITES
+                    && sprite.x != 0
+                    && sprite.y <= self.line_y + 16
+                    && self.line_y + 16 < sprite.y + self.lcdc.obj_size.height()
+                {
+                    self.visible_sprites.push(sprite);
+                }
+
+                self.oam_index += 4;
+
+                if self.oam_index == Self::OAM_SIZE {
+                    self.oam_index = 0;
+                    self.visible_sprites.clear();
+                    self.stat.mode = Mode::PixelTransfer;
+                }
+            }
+            Mode::PixelTransfer => {
+                if self.x_pos == 160 {
+                    self.bg_pixel_fifo.clear();
+                    self.obj_pixel_fifo.clear();
+                    self.stat.mode = Mode::HBlank;
+                    self.x_pos = 0;
+                }
+            }
+            Mode::HBlank | Mode::VBlank => {}
+        }
+
+        self.line_cycles_count = (self.line_cycles_count + 1) % Self::CYCLES_PER_LINE;
+        if self.line_cycles_count == 0 {
+            self.line_y = (self.line_y + 1) % Self::LINES_PER_FRAME;
+            match self.line_y {
+                0..=Self::LAST_VISIBLE_LINE => self.stat.mode = Mode::OamSearch,
+                Self::LCD_SIZE_Y => self.stat.mode = Mode::VBlank,
+                _ => {}
+            }
+        }
+    }
+
+    pub fn screen(&self) -> &[Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize] {
         &self.screen
     }
 
     pub fn read_vram(&self, address: u16) -> u8 {
-        self.vram[address as usize]
+        match self.stat.mode {
+            Mode::OamSearch | Mode::HBlank | Mode::VBlank => self.vram[address as usize],
+            Mode::PixelTransfer => 0xFF,
+        }
     }
 
     pub fn write_vram(&mut self, address: u16, value: u8) {
-        self.vram[address as usize] = value;
+        match self.stat.mode {
+            Mode::OamSearch | Mode::HBlank | Mode::VBlank => self.vram[address as usize] = value,
+            Mode::PixelTransfer => {}
+        }
     }
 
     pub fn read_oam(&self, address: u16) -> u8 {
-        self.oam[address as usize]
+        match self.stat.mode {
+            Mode::HBlank | Mode::VBlank => self.oam[address as usize],
+            Mode::OamSearch | Mode::PixelTransfer => 0xFF,
+        }
     }
 
     pub fn write_oam(&mut self, address: u16, value: u8) {
-        self.oam[address as usize] = value;
+        match self.stat.mode {
+            Mode::HBlank | Mode::VBlank => self.oam[address as usize] = value,
+            Mode::OamSearch | Mode::PixelTransfer => {}
+        }
     }
 
     pub fn read_registers(&self, address: u16) -> u8 {
