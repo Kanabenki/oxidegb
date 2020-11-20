@@ -78,7 +78,7 @@ impl Mmu {
     }
 
     pub fn interrupts(&self) -> FlagSet<Interrupt> {
-        self.io.interrupt_flags
+        self.io.interrupt_flags & self.interrupt_enable
     }
 
     pub fn reset_interrupt(&mut self, interrupt: Interrupt) {

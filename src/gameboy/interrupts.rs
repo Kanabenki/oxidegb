@@ -11,11 +11,11 @@ flags! {
 }
 
 impl Interrupt {
-    const VBLANK_ADDRESS: u16 = 0x0000;
-    const LCD_STAT_ADDRESS: u16 = 0x0000;
-    const TIMER_ADDRESS: u16 = 0x0000;
-    const SERIAL_ADDRESS: u16 = 0x0000;
-    const JOYPAD_ADDRESS: u16 = 0x0000;
+    const VBLANK_ADDRESS: u16 = 0x40;
+    const LCD_STAT_ADDRESS: u16 = 0x48;
+    const TIMER_ADDRESS: u16 = 0x50;
+    const SERIAL_ADDRESS: u16 = 0x58;
+    const JOYPAD_ADDRESS: u16 = 0x60;
 
     pub fn address(&self) -> u16 {
         match self {

@@ -94,13 +94,143 @@ impl Buttons {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+enum InputClock {
+    CpuDiv1024 = 0,
+    CpuDiv16 = 1,
+    CpuDiv64 = 2,
+    CpuDiv256 = 3,
+}
+
+impl InputClock {
+    fn bit(&self) -> u16 {
+        match self {
+            InputClock::CpuDiv1024 => (1 << 10),
+            InputClock::CpuDiv16 => (1 << 4),
+            InputClock::CpuDiv64 => (1 << 6),
+            InputClock::CpuDiv256 => (1 << 8),
+        }
+    }
+}
+
+enum TimerState {
+    Normal,
+    Overflowed,
+}
+
+struct Timer {
+    divider: u16,
+    counter: u8,
+    modulo: u8,
+    enabled: bool,
+    input_clock: InputClock,
+    state: TimerState,
+}
+
+impl Timer {
+    const DIVIDER_ADDRESS: u16 = 0xFF04;
+    const COUNTER_ADDRESS: u16 = 0xFF05;
+    const MODULO_ADDRESS: u16 = 0xFF06;
+    const CONTROL_ADDRESS: u16 = 0xFF07;
+
+    fn new() -> Self {
+        Self {
+            divider: 0,
+            counter: 0,
+            modulo: 0,
+            enabled: false,
+            input_clock: InputClock::CpuDiv1024,
+            state: TimerState::Normal,
+        }
+    }
+
+    fn tick(&mut self) -> bool {
+        let new_divider = self.divider.wrapping_add(4);
+
+        match self.state {
+            TimerState::Normal => {
+                if self.enabled && (new_divider ^ self.divider) & self.input_clock.bit() != 0 {
+                    self.increase_counter();
+
+                    return false;
+                }
+            }
+            TimerState::Overflowed => {
+                self.counter = self.modulo;
+                self.state = TimerState::Normal;
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn increase_counter(&mut self) {
+        let (counter, overflowed) = self.modulo.overflowing_add(1);
+        self.counter = counter;
+
+        if overflowed {
+            self.state = TimerState::Overflowed;
+        }
+    }
+
+    fn read(&self, address: u16) -> u8 {
+        match address {
+            Self::DIVIDER_ADDRESS => (self.divider >> 8) as u8,
+            Self::COUNTER_ADDRESS => self.counter,
+            Self::MODULO_ADDRESS => self.modulo,
+            Self::CONTROL_ADDRESS => {
+                0b1111_1000 | (u8::from(self.enabled) << 2) | self.input_clock as u8
+            }
+            _ => panic!("Tried to read timer register out of range"),
+        }
+    }
+
+    fn write(&mut self, address: u16, value: u8) {
+        match address {
+            Self::DIVIDER_ADDRESS => {
+                if self.divider & self.input_clock.bit() != 0 {
+                    self.increase_counter()
+                }
+                self.divider = 0;
+            }
+            Self::COUNTER_ADDRESS => self.counter = value,
+            Self::MODULO_ADDRESS => self.modulo = value,
+            Self::CONTROL_ADDRESS => {
+                let old_enabled = self.enabled;
+                let old_div_bit = self.divider & self.input_clock.bit();
+
+                self.enabled = value & 0b100 != 0;
+                self.input_clock = match value & 0b11 {
+                    0 => InputClock::CpuDiv1024,
+                    1 => InputClock::CpuDiv16,
+                    2 => InputClock::CpuDiv64,
+                    3 => InputClock::CpuDiv256,
+                    _ => unreachable!(),
+                };
+
+                let new_div_bit = self.divider & self.input_clock.bit();
+                if (old_enabled && !self.enabled && old_div_bit != 0)
+                    || (!old_enabled && self.enabled && old_div_bit == 0 && new_div_bit != 0)
+                {
+                    self.increase_counter();
+                }
+            }
+            _ => panic!("Tried to write timer register out of range"),
+        }
+    }
+}
+
 mod map {
     pub const BUTTONS: u16 = 0xFF00;
+    pub const TIMER_START: u16 = 0xFF04;
+    pub const TIMER_END: u16 = 0xFF07;
     pub const INTERRUPT_FLAGS: u16 = 0xFF0F;
 }
 
 pub struct Io {
     pub(super) buttons: Buttons,
+    timer: Timer,
     pub interrupt_flags: FlagSet<Interrupt>,
 }
 
@@ -108,6 +238,7 @@ impl Io {
     pub fn new() -> Self {
         Self {
             buttons: Buttons::new(),
+            timer: Timer::new(),
             interrupt_flags: FlagSet::new_truncated(0),
         }
     }
@@ -118,6 +249,10 @@ impl Io {
             interrupts |= Interrupt::Joypad;
         }
 
+        if self.timer.tick() {
+            interrupts |= Interrupt::Timer;
+        }
+
         interrupts
     }
 
@@ -125,6 +260,7 @@ impl Io {
         use map::*;
         match address {
             BUTTONS => self.buttons.read(),
+            TIMER_START..=TIMER_END => self.timer.read(address),
             INTERRUPT_FLAGS => self.interrupt_flags.bits() | 0b11100000,
             _ => todo!(),
         }
@@ -134,6 +270,7 @@ impl Io {
         use map::*;
         match address {
             BUTTONS => self.buttons.write(value),
+            TIMER_START..=TIMER_END => self.timer.write(address, value),
             INTERRUPT_FLAGS => self.interrupt_flags = FlagSet::new_truncated(value),
             _ => todo!(),
         }
