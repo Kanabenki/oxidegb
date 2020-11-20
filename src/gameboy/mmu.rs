@@ -1,6 +1,6 @@
 use flagset::FlagSet;
 
-use super::{cartridge::Cartridge, interrupts::Interrupt, io::Io, ppu::Ppu};
+use super::{cartridge::Cartridge, interrupts::Interrupt, io::Io, ppu::DmaRequest, ppu::Ppu};
 use crate::error::Error;
 
 mod map {
@@ -32,6 +32,15 @@ mod map {
     pub const IE: u16 = 0xFFFF;
 }
 
+enum Dma {
+    None,
+    InProgress {
+        stored_value: u8,
+        offset: u8,
+        base_address: u16,
+    },
+}
+
 pub trait MemoryOps {
     fn read_byte(&mut self, address: u16) -> u8;
 
@@ -56,6 +65,7 @@ pub struct Mmu {
     pub(super) ppu: Ppu,
     pub(super) io: Io,
     cartridge: Cartridge,
+    dma: Dma,
     interrupt_enable: FlagSet<Interrupt>,
     ie_value: u8,
 }
@@ -68,13 +78,46 @@ impl Mmu {
             ppu: Ppu::new(),
             io: Io::new(),
             cartridge: Cartridge::new(rom, bootrom)?,
+            dma: Dma::None,
             interrupt_enable: FlagSet::new_truncated(0),
             ie_value: 0,
         })
     }
 
-    fn tick(&mut self) {
-        self.io.interrupt_flags = self.ppu.tick() | self.io.tick();
+    pub fn tick(&mut self) {
+        let io_interrupts = self.io.tick();
+        let (ppu_interrupts, dma) = self.ppu.tick();
+        self.io.interrupt_flags = io_interrupts | ppu_interrupts;
+
+        if let DmaRequest::Start(high_byte) = dma {
+            let base_address = (high_byte as u16) << 8;
+            let stored_value = self.read_byte(base_address);
+            self.dma = Dma::InProgress {
+                stored_value,
+                offset: 0,
+                base_address,
+            };
+        } else {
+            if let Dma::InProgress {
+                stored_value,
+                offset,
+                base_address,
+            } = self.dma
+            {
+                self.write_byte(map::OAM_START + offset as u16, stored_value);
+                let offset = offset + 1;
+                let stored_value = self.read_byte(base_address + offset as u16);
+                self.dma = if offset < Ppu::OAM_SIZE as u8 {
+                    Dma::InProgress {
+                        stored_value,
+                        offset,
+                        base_address,
+                    }
+                } else {
+                    Dma::None
+                };
+            }
+        }
     }
 
     pub fn interrupts(&self) -> FlagSet<Interrupt> {
@@ -88,8 +131,6 @@ impl Mmu {
 
 impl MemoryOps for Mmu {
     fn read_byte(&mut self, address: u16) -> u8 {
-        self.tick();
-
         use map::*;
         match address {
             ROM_START..=ROM_END => self.cartridge.read_rom(address - ROM_START),
@@ -110,8 +151,6 @@ impl MemoryOps for Mmu {
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
-        self.tick();
-
         use map::*;
         match address {
             ROM_START..=ROM_END => self.cartridge.write_rom(address - ROM_START, value),

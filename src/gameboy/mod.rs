@@ -24,7 +24,7 @@ impl Gameboy {
     }
 
     pub fn tick(&mut self) {
-        self.cpu.tick();
+        self.cpu.next_instruction();
     }
 
     pub fn screen(&self) -> &[ppu::Color; 166 * 144] {

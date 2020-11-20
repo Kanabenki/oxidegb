@@ -16,6 +16,11 @@ use self::{
 };
 use super::interrupts::Interrupt;
 
+pub enum DmaRequest {
+    None,
+    Start(u8),
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Color([u8; 4]);
 
@@ -26,6 +31,8 @@ pub struct Ppu {
     bg_pixel_fifo: PixelFifo,
     obj_pixel_fifo: PixelFifo,
     visible_sprites: Vec<sprite::Attributes>,
+    dma: DmaRequest,
+    dma_address: u8,
     oam_index: usize,
     lcdc: LcdControl,
     stat: LcdStatus,
@@ -43,7 +50,7 @@ pub struct Ppu {
 }
 
 impl Ppu {
-    const OAM_SIZE: usize = 0x9F;
+    pub const OAM_SIZE: usize = 0xA0;
 
     const LCD_SIZE_X: u8 = 166;
     const LCD_SIZE_Y: u8 = 144;
@@ -56,6 +63,7 @@ impl Ppu {
     const SCROLL_X: u16 = 0xFF43;
     const LINE_Y: u16 = 0xFF44;
     const LINE_Y_COMPARE: u16 = 0xFF45;
+    const OAM_DMA: u16 = 0xFF46;
     const BG_PALETTE: u16 = 0xFF47;
     const OBJ_PALETTE_0: u16 = 0xFF48;
     const OBJ_PALETTE_1: u16 = 0xFF49;
@@ -77,6 +85,8 @@ impl Ppu {
             bg_pixel_fifo: PixelFifo::new(),
             obj_pixel_fifo: PixelFifo::new(),
             visible_sprites: Vec::with_capacity(10),
+            dma: DmaRequest::None,
+            dma_address: 0,
             oam_index: 0,
             lcdc: LcdControl::new(),
             stat: LcdStatus::new(),
@@ -94,7 +104,7 @@ impl Ppu {
         }
     }
 
-    pub fn tick(&mut self) -> FlagSet<Interrupt> {
+    pub fn tick(&mut self) -> (FlagSet<Interrupt>, DmaRequest) {
         let mut interrupts = FlagSet::new_truncated(0);
 
         match self.stat.mode {
@@ -161,7 +171,10 @@ impl Ppu {
             }
         }
 
-        interrupts
+        (
+            interrupts,
+            std::mem::replace(&mut self.dma, DmaRequest::None),
+        )
     }
 
     pub fn screen(&self) -> &[Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize] {
@@ -204,6 +217,7 @@ impl Ppu {
             Self::SCROLL_X => self.scroll_x,
             Self::LINE_Y => self.line_y,
             Self::LINE_Y_COMPARE => self.line_y_compare,
+            Self::OAM_DMA => self.dma_address,
             Self::BG_PALETTE => self.bg_palette.value(),
             Self::OBJ_PALETTE_0 => self.obj_palette_0.value(),
             Self::OBJ_PALETTE_1 => self.obj_palette_1.value(),
@@ -221,6 +235,10 @@ impl Ppu {
             Self::SCROLL_X => self.scroll_x = value,
             Self::LINE_Y => todo!(),
             Self::LINE_Y_COMPARE => self.line_y_compare = value,
+            Self::OAM_DMA => {
+                self.dma = DmaRequest::Start(value);
+                self.dma_address = value;
+            }
             Self::BG_PALETTE => self.bg_palette.set_value(value),
             Self::OBJ_PALETTE_0 => self.obj_palette_0.set_value(value),
             Self::OBJ_PALETTE_1 => self.obj_palette_1.set_value(value),

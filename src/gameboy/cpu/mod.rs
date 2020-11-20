@@ -22,12 +22,12 @@ pub struct Cpu {
 
 impl MemoryOps for Cpu {
     fn read_byte(&mut self, address: u16) -> u8 {
-        self.cycles_count += 4;
+        self.tick();
         self.mmu.read_byte(address)
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
-        self.cycles_count += 4;
+        self.tick();
         self.mmu.write_byte(address, value);
     }
 }
@@ -47,7 +47,7 @@ impl Cpu {
         })
     }
 
-    pub fn tick(&mut self) {
+    pub fn next_instruction(&mut self) {
         if self.registers.ime {
             if let Some(interrupt) = self.mmu.interrupts().into_iter().next() {
                 self.push_stack(self.registers.pc);
@@ -59,6 +59,11 @@ impl Cpu {
 
         let opcode = self.fetch_byte_pc();
         Self::OPCODE_TABLE[opcode as usize](self, opcode);
+    }
+
+    fn tick(&mut self) {
+        self.cycles_count += 4;
+        self.mmu.tick();
     }
 
     fn fetch_byte_pc(&mut self) -> u8 {
