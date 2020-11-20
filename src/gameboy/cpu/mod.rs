@@ -3,12 +3,9 @@ mod registers;
 
 use std::primitive::u16;
 
-use crate::{
-    error::Error,
-    gameboy::mmu::{MemoryOps, Mmu},
-};
-
 use self::registers::{RegisterIndex, Registers};
+use super::mmu::{MemoryOps, Mmu};
+use crate::error::Error;
 
 enum ExecutionState {
     Continue,
@@ -17,8 +14,8 @@ enum ExecutionState {
 }
 
 pub struct Cpu {
-    pub registers: Registers,
-    pub mmu: Mmu,
+    registers: Registers,
+    pub(super) mmu: Mmu,
     cycles_count: u32,
     execution_state: ExecutionState,
 }
@@ -51,6 +48,15 @@ impl Cpu {
     }
 
     pub fn tick(&mut self) {
+        if self.registers.ime {
+            if let Some(interrupt) = self.mmu.interrupts().into_iter().next() {
+                self.push_stack(self.registers.pc);
+                self.registers.pc = self.read_dbyte(interrupt.address());
+                self.mmu.reset_interrupt(interrupt);
+                self.registers.ime = false;
+            }
+        }
+
         let opcode = self.fetch_byte_pc();
         Self::OPCODE_TABLE[opcode as usize](self, opcode);
     }

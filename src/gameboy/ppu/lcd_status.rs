@@ -18,7 +18,7 @@ pub struct LcdStatus {
     oam_interrupt_enabled: bool,
     vblank_interrupt_enabled: bool,
     hblank_interrupt_enabled: bool,
-    lyc_coincidence: bool,
+    pub lyc_coincidence: bool,
     pub mode: Mode,
 }
 
@@ -44,5 +44,21 @@ impl LcdStatus {
         self.oam_interrupt_enabled = value & (1 << 5) != 0;
         self.vblank_interrupt_enabled = value & (1 << 4) != 0;
         self.hblank_interrupt_enabled = value & (1 << 3) != 0;
+    }
+
+    pub fn coincidence_interrupt_enabled(&self) -> bool {
+        self.coincidence_interrupt_enabled
+    }
+
+    pub fn oam_interrupt_enabled(&self) -> bool {
+        self.oam_interrupt_enabled
+    }
+
+    pub fn vblank_interrupt_enabled(&self) -> bool {
+        self.vblank_interrupt_enabled
+    }
+
+    pub fn hblank_interrupt_enabled(&self) -> bool {
+        self.hblank_interrupt_enabled
     }
 }

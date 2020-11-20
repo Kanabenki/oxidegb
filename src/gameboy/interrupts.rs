@@ -1,10 +1,29 @@
 use flagset::{flags, FlagSet};
 
 flags! {
-    enum Interrupt: u8 {
-        VBlank = 0b0000,
-        LcdStat = 0b0010,
-        Serial = 0b0100,
-        Joypad = 0b1000
+    pub enum Interrupt: u8 {
+        VBlank  = 0b00001,
+        LcdStat = 0b00010,
+        Timer   = 0b00100,
+        Serial  = 0b01000,
+        Joypad  = 0b10000
+    }
+}
+
+impl Interrupt {
+    const VBLANK_ADDRESS: u16 = 0x0000;
+    const LCD_STAT_ADDRESS: u16 = 0x0000;
+    const TIMER_ADDRESS: u16 = 0x0000;
+    const SERIAL_ADDRESS: u16 = 0x0000;
+    const JOYPAD_ADDRESS: u16 = 0x0000;
+
+    pub fn address(&self) -> u16 {
+        match self {
+            Interrupt::VBlank => Self::VBLANK_ADDRESS,
+            Interrupt::LcdStat => Self::LCD_STAT_ADDRESS,
+            Interrupt::Timer => Self::TIMER_ADDRESS,
+            Interrupt::Serial => Self::SERIAL_ADDRESS,
+            Interrupt::Joypad => Self::JOYPAD_ADDRESS,
+        }
     }
 }

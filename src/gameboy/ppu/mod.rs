@@ -4,12 +4,17 @@ mod palette;
 mod pixel_transfer;
 mod sprite;
 
+use std::convert::TryInto;
+
+use flagset::FlagSet;
+
 use self::{
     lcd_control::LcdControl,
     lcd_status::{LcdStatus, Mode},
     palette::Palette,
     pixel_transfer::PixelFifo,
 };
+use super::interrupts::Interrupt;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Color([u8; 4]);
@@ -89,16 +94,16 @@ impl Ppu {
         }
     }
 
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self) -> FlagSet<Interrupt> {
+        let mut interrupts = FlagSet::new_truncated(0);
+
         match self.stat.mode {
             Mode::OamSearch => {
-                let i = self.oam_index;
-                let sprite = sprite::Attributes::parse([
-                    self.oam[i],
-                    self.oam[i + 1],
-                    self.oam[i + 2],
-                    self.oam[i + 3],
-                ]);
+                let sprite = sprite::Attributes::parse(
+                    self.oam[self.oam_index..self.oam_index + 4]
+                        .try_into()
+                        .unwrap(),
+                );
 
                 if self.visible_sprites.len() < Self::MAX_VISIBLE_SPRITES
                     && sprite.x != 0
@@ -114,6 +119,10 @@ impl Ppu {
                     self.oam_index = 0;
                     self.visible_sprites.clear();
                     self.stat.mode = Mode::PixelTransfer;
+
+                    if self.stat.oam_interrupt_enabled() {
+                        interrupts |= Interrupt::LcdStat;
+                    }
                 }
             }
             Mode::PixelTransfer => {
@@ -122,6 +131,10 @@ impl Ppu {
                     self.obj_pixel_fifo.clear();
                     self.stat.mode = Mode::HBlank;
                     self.x_pos = 0;
+
+                    if self.stat.hblank_interrupt_enabled() {
+                        interrupts |= Interrupt::LcdStat;
+                    }
                 }
             }
             Mode::HBlank | Mode::VBlank => {}
@@ -130,12 +143,25 @@ impl Ppu {
         self.line_cycles_count = (self.line_cycles_count + 1) % Self::CYCLES_PER_LINE;
         if self.line_cycles_count == 0 {
             self.line_y = (self.line_y + 1) % Self::LINES_PER_FRAME;
+
+            self.stat.lyc_coincidence = self.line_y == self.line_y_compare;
+            if self.stat.lyc_coincidence && self.stat.coincidence_interrupt_enabled() {
+                interrupts |= Interrupt::LcdStat;
+            }
+
             match self.line_y {
                 0..=Self::LAST_VISIBLE_LINE => self.stat.mode = Mode::OamSearch,
-                Self::LCD_SIZE_Y => self.stat.mode = Mode::VBlank,
+                Self::LCD_SIZE_Y => {
+                    self.stat.mode = Mode::VBlank;
+                    if self.stat.vblank_interrupt_enabled() {
+                        interrupts |= Interrupt::VBlank;
+                    }
+                }
                 _ => {}
             }
         }
+
+        interrupts
     }
 
     pub fn screen(&self) -> &[Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize] {

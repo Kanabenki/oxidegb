@@ -460,7 +460,8 @@ impl Cpu {
     }
 
     fn reti(&mut self, _opcode: u8) {
-        todo!()
+        self.ret(_opcode);
+        self.registers.ime = true;
     }
 
     fn ret_cc(&mut self, opcode: u8) {

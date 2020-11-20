@@ -1,7 +1,7 @@
-use crate::{
-    error::Error,
-    gameboy::{cartridge::Cartridge, io::Io, ppu::Ppu},
-};
+use flagset::FlagSet;
+
+use super::{cartridge::Cartridge, interrupts::Interrupt, io::Io, ppu::Ppu};
+use crate::error::Error;
 
 mod map {
     pub const ROM_START: u16 = 0x0000;
@@ -56,6 +56,8 @@ pub struct Mmu {
     pub(super) ppu: Ppu,
     pub(super) io: Io,
     cartridge: Cartridge,
+    interrupt_enable: FlagSet<Interrupt>,
+    ie_value: u8,
 }
 
 impl Mmu {
@@ -66,11 +68,21 @@ impl Mmu {
             ppu: Ppu::new(),
             io: Io::new(),
             cartridge: Cartridge::new(rom, bootrom)?,
+            interrupt_enable: FlagSet::new_truncated(0),
+            ie_value: 0,
         })
     }
 
     fn tick(&mut self) {
-        self.ppu.tick();
+        self.io.interrupt_flags = self.ppu.tick() | self.io.tick();
+    }
+
+    pub fn interrupts(&self) -> FlagSet<Interrupt> {
+        self.io.interrupt_flags
+    }
+
+    pub fn reset_interrupt(&mut self, interrupt: Interrupt) {
+        self.io.interrupt_flags &= !interrupt;
     }
 }
 
@@ -93,7 +105,7 @@ impl MemoryOps for Mmu {
             DISABLE_BOOTROM => 0xFF,
             CGB_REGISTERS_START..=CGB_REGISTERS_END => 0xFF,
             HRAM_START..=HRAM_END => self.hram[(address - HRAM_START) as usize],
-            IE => 0,
+            IE => self.interrupt_enable.bits() | (self.ie_value & 0b11100000),
         }
     }
 
@@ -121,7 +133,10 @@ impl MemoryOps for Mmu {
             }
             CGB_REGISTERS_START..=CGB_REGISTERS_END => {}
             HRAM_START..=HRAM_END => self.hram[(address - HRAM_START) as usize] = value,
-            IE => (),
+            IE => {
+                self.interrupt_enable = FlagSet::new_truncated(value);
+                self.ie_value = value;
+            }
         }
     }
 }
