@@ -1,11 +1,28 @@
 use std::convert::{TryFrom, TryInto};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Color {
     White = 0,
     LightGray = 1,
     DarkGray = 2,
     Black = 3,
+}
+
+impl Color {
+    pub fn from_packed(value: u16) -> [Self; 8] {
+        let mut colors = [Self::White; 8];
+        for i in 0..8 {
+            colors[7 - i] = match (value >> (i * 2)) & 0b11 {
+                0 => Self::White,
+                1 => Self::LightGray,
+                2 => Self::DarkGray,
+                3 => Self::Black,
+                _ => unreachable!(),
+            };
+        }
+
+        colors
+    }
 }
 
 impl TryFrom<u8> for Color {

@@ -4,10 +4,30 @@ pub enum TileMapRange {
     High = 1,
 }
 
+impl TileMapRange {
+    pub fn base_address(&self) -> u16 {
+        match self {
+            TileMapRange::Low => 0x1800,
+            TileMapRange::High => 0x1C00,
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum TileDataAddressing {
     Unsigned = 0,
     Signed = 1,
+}
+
+impl TileDataAddressing {
+    pub fn address_from_index(&self, index: u8, line: u16) -> u16 {
+        match self {
+            TileDataAddressing::Unsigned => (index as u16 + (line % 8)) * 2,
+            TileDataAddressing::Signed => {
+                0x1000u16.wrapping_add((index as i8 as i16 * 2) as u16) + (line % 8) * 2
+            }
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

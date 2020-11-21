@@ -61,7 +61,7 @@ pub trait MemoryOps {
 
 pub struct Mmu {
     wram: [u8; 8192],
-    hram: [u8; 126],
+    hram: [u8; 127],
     pub(super) ppu: Ppu,
     pub(super) io: Io,
     cartridge: Cartridge,
@@ -74,7 +74,7 @@ impl Mmu {
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
         Ok(Self {
             wram: [0; 8192],
-            hram: [0; 126],
+            hram: [0; 127],
             ppu: Ppu::new(),
             io: Io::new(),
             cartridge: Cartridge::new(rom, bootrom)?,

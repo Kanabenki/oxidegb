@@ -15,7 +15,7 @@ pub struct Gameboy {
 }
 
 impl Gameboy {
-    const _FREQUENCY: u32 = 4_194_304u32;
+    const TICKS_PER_FRAME: u32 = 70_224;
 
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
         Ok(Self {
@@ -23,11 +23,17 @@ impl Gameboy {
         })
     }
 
-    pub fn tick(&mut self) {
-        self.cpu.next_instruction();
+    pub fn run_frame(&mut self, _delta: u32) -> u32 {
+        loop {
+            let cycles_elapsed = self.cpu.next_instruction();
+            if cycles_elapsed >= Self::TICKS_PER_FRAME {
+                self.cpu.reset_cycles();
+                return cycles_elapsed - Self::TICKS_PER_FRAME;
+            }
+        }
     }
 
-    pub fn screen(&self) -> &[ppu::Color; 166 * 144] {
+    pub fn screen(&self) -> &[ppu::Color; 160 * 144] {
         self.cpu.mmu.ppu.screen()
     }
 

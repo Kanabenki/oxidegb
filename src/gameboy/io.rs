@@ -223,6 +223,9 @@ impl Timer {
 
 mod map {
     pub const BUTTONS: u16 = 0xFF00;
+    pub const SERIAL_TRANSFER: u16 = 0xFF01;
+    pub const SERIAL_CONTROL: u16 = 0xFF02;
+    pub const UNUSED: u16 = 0xFF03;
     pub const TIMER_START: u16 = 0xFF04;
     pub const TIMER_END: u16 = 0xFF07;
     pub const INTERRUPT_FLAGS: u16 = 0xFF0F;
@@ -260,9 +263,15 @@ impl Io {
         use map::*;
         match address {
             BUTTONS => self.buttons.read(),
+            SERIAL_TRANSFER => 0xFF,
+            SERIAL_CONTROL => 0xFF,
+            UNUSED => 0xFF,
             TIMER_START..=TIMER_END => self.timer.read(address),
             INTERRUPT_FLAGS => self.interrupt_flags.bits() | 0b11100000,
-            _ => todo!(),
+            invalid_address => panic!(
+                "Tried to read at invalid io register address 0x{:X}",
+                invalid_address
+            ),
         }
     }
 
@@ -270,9 +279,15 @@ impl Io {
         use map::*;
         match address {
             BUTTONS => self.buttons.write(value),
+            SERIAL_TRANSFER => {}
+            SERIAL_CONTROL => {}
+            UNUSED => {}
             TIMER_START..=TIMER_END => self.timer.write(address, value),
             INTERRUPT_FLAGS => self.interrupt_flags = FlagSet::new_truncated(value),
-            _ => todo!(),
+            invalid_address => panic!(
+                "Tried to write at invalid io register address 0x{:X}",
+                invalid_address
+            ),
         }
     }
 }

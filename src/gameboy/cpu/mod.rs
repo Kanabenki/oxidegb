@@ -47,7 +47,7 @@ impl Cpu {
         })
     }
 
-    pub fn next_instruction(&mut self) {
+    pub fn next_instruction(&mut self) -> u32 {
         if self.registers.ime {
             if let Some(interrupt) = self.mmu.interrupts().into_iter().next() {
                 self.push_stack(self.registers.pc);
@@ -57,13 +57,23 @@ impl Cpu {
             }
         }
 
+        dbg!(self.registers.pc);
+        let mut a = String::new();
+        std::io::stdin().read_line(&mut a).unwrap();
+
         let opcode = self.fetch_byte_pc();
         Self::OPCODE_TABLE[opcode as usize](self, opcode);
+
+        self.cycles_count
     }
 
     fn tick(&mut self) {
         self.cycles_count += 4;
         self.mmu.tick();
+    }
+
+    pub fn reset_cycles(&mut self) {
+        self.cycles_count = 0;
     }
 
     fn fetch_byte_pc(&mut self) -> u8 {

@@ -60,12 +60,11 @@ impl Emulator {
 
             match event {
                 Event::RedrawRequested(_) => {
-                    self.pixels
-                        .get_frame()
-                        .chunks_exact_mut(4)
-                        .next()
-                        .unwrap()
-                        .copy_from_slice(&[0xFF, 0x00, 0xFF, 0xFF]);
+                    let screen = self.gameboy.screen();
+                    for (i, pixel) in self.pixels.get_frame().chunks_exact_mut(4).enumerate() {
+                        let color: [u8; 4] = screen[i].into();
+                        pixel.copy_from_slice(&color);
+                    }
                     if self.pixels.render().is_err() {
                         *control_flow = ControlFlow::Exit;
                     }
@@ -75,7 +74,7 @@ impl Emulator {
                     event: WindowEvent::CloseRequested,
                 } if window_id == self.window.id() => *control_flow = ControlFlow::Exit,
                 Event::MainEventsCleared => {
-                    self.gameboy.tick();
+                    self.gameboy.run_frame(0);
                     self.window.request_redraw();
                 }
                 _ => (),
