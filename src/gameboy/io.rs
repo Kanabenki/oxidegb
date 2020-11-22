@@ -279,8 +279,8 @@ impl Io {
         use map::*;
         match address {
             BUTTONS => self.buttons.write(value),
-            SERIAL_TRANSFER => {}
-            SERIAL_CONTROL => {}
+            SERIAL_TRANSFER => println!("ST {:x}", value),
+            SERIAL_CONTROL => println!("SC {:x}", value),
             UNUSED => {}
             TIMER_START..=TIMER_END => self.timer.write(address, value),
             INTERRUPT_FLAGS => self.interrupt_flags = FlagSet::new_truncated(value),

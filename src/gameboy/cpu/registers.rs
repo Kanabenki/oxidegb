@@ -5,11 +5,11 @@ pub struct RegisterIndex(u8);
 
 impl RegisterIndex {
     pub const fn from_opcode_first(opcode: u8) -> Self {
-        Self((opcode >> 3) & 0b11)
+        Self((opcode >> 3) & 0b111)
     }
 
     pub const fn from_opcode_second(opcode: u8) -> Self {
-        Self(opcode & 0b11)
+        Self(opcode & 0b111)
     }
 
     pub const fn value(&self) -> u8 {

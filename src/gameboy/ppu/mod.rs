@@ -217,11 +217,13 @@ impl Ppu {
     }
 
     fn tick_pixel_transfer(&mut self) {
+        println!("line y {} scroll y {}", self.line_y, self.scroll_y);
         self.bg_fetcher.tick(
             &mut self.bg_pixel_fifo,
             self.lcdc.bg_tile_map,
             self.lcdc.bg_window_addressing,
-            self.line_y as u16 + self.scroll_y as u16,
+            self.line_y,
+            self.scroll_y,
             &self.vram,
         );
 

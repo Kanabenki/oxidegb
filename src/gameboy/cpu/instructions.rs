@@ -432,25 +432,26 @@ impl Cpu {
     }
 
     fn jr_r8(&mut self, _opcode: u8) {
-        self.registers.pc = (Wr(self.registers.pc) + Wr(self.fetch_byte_pc() as i8 as u16)).0;
+        let offset = self.fetch_byte_pc() as i8 as u16;
+        self.registers.pc = self.registers.pc.wrapping_add(offset);
     }
 
     fn jr_cc(&mut self, opcode: u8) {
-        let address = (Wr(self.registers.pc) + Wr(self.fetch_byte_pc() as i8 as u16)).0;
+        let offset = self.fetch_byte_pc() as i8 as u16;
         if self.test_cc(opcode) {
-            self.registers.pc = address;
+            self.registers.pc = self.registers.pc.wrapping_add(offset);
         }
     }
 
     fn call_u16(&mut self, _opcode: u8) {
-        self.push_stack(self.registers.pc);
+        self.push_stack(self.registers.pc.wrapping_add(2));
         self.registers.pc = self.fetch_dbyte_pc();
     }
 
     fn call_cc_u16(&mut self, opcode: u8) {
         let address = self.fetch_dbyte_pc();
         if self.test_cc(opcode) {
-            self.push_stack(self.registers.pc);
+            self.push_stack(self.registers.pc.wrapping_add(2));
             self.registers.pc = address;
         }
     }

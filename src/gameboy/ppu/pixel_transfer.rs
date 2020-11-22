@@ -18,6 +18,9 @@ pub struct Fetcher {
 }
 
 impl Fetcher {
+    const TILE_MAP_WIDTH: u16 = 32;
+    const SPRITE_HEIGHT: u16 = 8;
+
     pub fn new() -> Self {
         Self {
             action: FetcherAction::ReadTile,
@@ -35,15 +38,17 @@ impl Fetcher {
         fifo: &mut PixelFifo,
         tile_map: TileMapRange,
         addressing: TileDataAddressing,
-        line: u16,
+        line_y: u8,
+        scroll_y: u8,
         vram: &[u8],
     ) {
-        //println!("state {:?} waiting {} tile {}", self.action, self.waiting_cycle, self.tile_map_index);
         let waiting = self.waiting_cycle;
         self.waiting_cycle = !self.waiting_cycle;
         if waiting {
             return;
         }
+
+        let line = (line_y as u16 + scroll_y as u16) % (Self::TILE_MAP_WIDTH * Self::SPRITE_HEIGHT);
 
         match self.action {
             FetcherAction::ReadTile => {
@@ -53,7 +58,7 @@ impl Fetcher {
                         + (self.tile_map_index as u16))
                         as usize],
                 };
-                self.tile_map_index += 1;
+                self.tile_map_index = (self.tile_map_index + 1) % Self::TILE_MAP_WIDTH as u8;
             }
             FetcherAction::ReadData0 { tile_index } => {
                 let data_address = addressing.address_from_index(tile_index, line);

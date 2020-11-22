@@ -57,10 +57,6 @@ impl Cpu {
             }
         }
 
-        dbg!(self.registers.pc);
-        let mut a = String::new();
-        std::io::stdin().read_line(&mut a).unwrap();
-
         let opcode = self.fetch_byte_pc();
         Self::OPCODE_TABLE[opcode as usize](self, opcode);
 
@@ -116,12 +112,12 @@ impl Cpu {
 
     fn pop_stack(&mut self) -> u16 {
         let value = self.read_dbyte(self.registers.sp);
-        self.registers.sp += 2;
+        self.registers.sp = self.registers.sp.wrapping_add(2);
         value
     }
 
     fn push_stack(&mut self, value: u16) {
+        self.registers.sp = self.registers.sp.wrapping_sub(2);
         self.write_dbyte(self.registers.sp, value);
-        self.registers.sp -= 2;
     }
 }
