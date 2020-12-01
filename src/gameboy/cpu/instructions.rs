@@ -9,7 +9,7 @@ use crate::gameboy::mmu::MemoryOps;
 impl Cpu {
     #[rustfmt::skip]
     pub(super) const OPCODE_TABLE: [fn(&mut Self, u8); 256] = [
-        Self::nop,       Self::ld_rr_u16, Self::ld_mrr_a,    Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::rlca,    Self::ld_mu16_sp, Self::add_hl_rr, Self::ld_a_mrr,    Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8, Self::rrca,
+        Self::nop,       Self::ld_rr_u16, Self::ld_mrr_a,    Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::rlca,    Self::ld_mu16_sp, Self::add_hl_rr, Self::ld_a_mrr,    Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::rrca,
         Self::stop,      Self::ld_rr_u16, Self::ld_mrr_a,    Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::rla,     Self::jr_r8,      Self::add_hl_rr, Self::ld_a_mrr,    Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::rra,
         Self::jr_cc,     Self::ld_rr_u16, Self::ld_mhlinc_a, Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::daa,     Self::jr_cc,      Self::add_hl_rr, Self::ld_a_mhlinc, Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::cpl,
         Self::jr_cc,     Self::ld_rr_u16, Self::ld_mhldec_a, Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::scf,     Self::jr_cc,      Self::add_hl_rr, Self::ld_a_mhldec, Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::ccf,
@@ -444,14 +444,15 @@ impl Cpu {
     }
 
     fn call_u16(&mut self, _opcode: u8) {
-        self.push_stack(self.registers.pc.wrapping_add(2));
-        self.registers.pc = self.fetch_dbyte_pc();
+        let address = self.fetch_dbyte_pc();
+        self.push_stack(self.registers.pc);
+        self.registers.pc = address;
     }
 
     fn call_cc_u16(&mut self, opcode: u8) {
         let address = self.fetch_dbyte_pc();
         if self.test_cc(opcode) {
-            self.push_stack(self.registers.pc.wrapping_add(2));
+            self.push_stack(self.registers.pc);
             self.registers.pc = address;
         }
     }
@@ -460,8 +461,8 @@ impl Cpu {
         self.registers.pc = self.pop_stack();
     }
 
-    fn reti(&mut self, _opcode: u8) {
-        self.ret(_opcode);
+    fn reti(&mut self, opcode: u8) {
+        self.ret(opcode);
         self.registers.ime = true;
     }
 

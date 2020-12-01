@@ -8,15 +8,21 @@ pub enum Color {
     Black = 3,
 }
 
+impl Default for Color {
+    fn default() -> Self {
+        Color::White
+    }
+}
+
 impl Color {
-    pub fn from_packed(value: u16) -> [Self; 8] {
+    pub fn from_packed(data_0: u8, data_1: u8, palette: Palette) -> [Self; 8] {
         let mut colors = [Self::White; 8];
         for i in 0..8 {
-            colors[7 - i] = match (value >> (i * 2)) & 0b11 {
-                0 => Self::White,
-                1 => Self::LightGray,
-                2 => Self::DarkGray,
-                3 => Self::Black,
+            colors[7 - i] = match (((data_0 >> i) << 1) | (data_1 >> i)) & 0b11 {
+                0 => palette.0,
+                1 => palette.1,
+                2 => palette.2,
+                3 => palette.3,
                 _ => unreachable!(),
             };
         }
@@ -39,6 +45,7 @@ impl TryFrom<u8> for Color {
     }
 }
 
+#[derive(Debug, Copy, Clone, Default)]
 pub struct Palette(Color, Color, Color, Color);
 
 impl Palette {

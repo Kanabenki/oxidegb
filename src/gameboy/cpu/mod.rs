@@ -7,12 +7,14 @@ use self::registers::{RegisterIndex, Registers};
 use super::mmu::{MemoryOps, Mmu};
 use crate::error::Error;
 
+#[derive(Debug)]
 enum ExecutionState {
     Continue,
     Stop,
     IllegalInstruction,
 }
 
+#[derive(Debug)]
 pub struct Cpu {
     registers: Registers,
     pub(super) mmu: Mmu,

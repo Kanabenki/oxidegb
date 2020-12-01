@@ -16,6 +16,7 @@ use self::{
 };
 use super::interrupts::Interrupt;
 
+#[derive(Debug)]
 pub enum DmaRequest {
     None,
     Start(u8),
@@ -41,6 +42,7 @@ impl Into<[u8; 4]> for Color {
     }
 }
 
+#[derive(Debug)]
 pub struct Ppu {
     screen: [Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize],
     vram: [u8; Self::VRAM_SIZE],
@@ -61,7 +63,7 @@ pub struct Ppu {
     scroll_x: u8,
     to_discard_x: u8,
     x_pos: u8,
-    line_y: u8,
+    pub line_y: u8,
     line_y_compare: u8,
     window_y: u8,
     window_x: u8,
@@ -131,6 +133,12 @@ impl Ppu {
     }
 
     pub fn tick(&mut self) -> (FlagSet<Interrupt>, DmaRequest) {
+        if !self.lcdc.lcd_enable {
+            self.line_y = 0;
+            self.stat.mode = Mode::VBlank;
+            return (FlagSet::new_truncated(0), DmaRequest::None);
+        }
+
         let mut interrupts = FlagSet::new_truncated(0);
 
         match self.stat.mode {
@@ -217,11 +225,11 @@ impl Ppu {
     }
 
     fn tick_pixel_transfer(&mut self) {
-        println!("line y {} scroll y {}", self.line_y, self.scroll_y);
         self.bg_fetcher.tick(
             &mut self.bg_pixel_fifo,
-            self.lcdc.bg_tile_map,
-            self.lcdc.bg_window_addressing,
+            self.lcdc.bg_tile_map,          //lcd_control::TileMapRange::Low, //
+            self.lcdc.bg_window_addressing, // lcd_control::TileDataAddressing::Unsigned,  //
+            self.bg_palette,
             self.line_y,
             self.scroll_y,
             &self.vram,
@@ -235,6 +243,7 @@ impl Ppu {
                     [self.x_pos as usize + (self.line_y as usize * Self::LCD_SIZE_X as usize)] =
                     color.into();
                 self.x_pos += 1;
+                //eprintln!("X = {}", self.x_pos);
             }
         }
     }
@@ -252,7 +261,7 @@ impl Ppu {
 
     pub fn write_vram(&mut self, address: u16, value: u8) {
         match self.stat.mode {
-            Mode::OamSearch | Mode::HBlank | Mode::VBlank => self.vram[address as usize] = value,
+            Mode::OamSearch | Mode::HBlank | Mode::VBlank => self.vram[address as usize] = value, //eprintln!("VRAM WRITE {:X} at {:X}", value, address);
             Mode::PixelTransfer => {}
         }
     }
@@ -292,7 +301,13 @@ impl Ppu {
 
     pub fn write_registers(&mut self, address: u16, value: u8) {
         match address {
-            Self::LCDC => self.lcdc.set_value(value),
+            Self::LCDC => {
+                let enabled = self.lcdc.lcd_enable;
+                self.lcdc.set_value(value);
+                if !enabled && self.lcdc.lcd_enable {
+                    self.stat.mode = Mode::OamSearch;
+                }
+            }
             Self::STAT => self.stat.set_value(value),
             Self::SCROLL_Y => self.scroll_y = value,
             Self::SCROLL_X => self.scroll_x = value,

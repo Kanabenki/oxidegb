@@ -70,7 +70,7 @@ impl Flags {
             FlagOp::Carry => lhs as u16 + rhs as u16 + carry as u16 > 0xff,
             FlagOp::Borrow => (lhs as u16) < (rhs as u16 + carry as u16),
         };
-        self.set(Flag::H, set);
+        self.set(Flag::C, set);
     }
 
     pub fn update_carry_u16(&mut self, lhs: u16, rhs: u16, flag_op: FlagOp) {
@@ -78,7 +78,7 @@ impl Flags {
             FlagOp::Carry => lhs as u32 + rhs as u32 > 0xffff,
             FlagOp::Borrow => lhs < rhs,
         };
-        self.set(Flag::H, set);
+        self.set(Flag::C, set);
     }
 
     pub fn update_half_carry_u8(&mut self, lhs: u8, rhs: u8, with_carry: bool, flag_op: FlagOp) {

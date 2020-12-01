@@ -32,6 +32,7 @@ mod map {
     pub const IE: u16 = 0xFFFF;
 }
 
+#[derive(Debug)]
 enum Dma {
     None,
     InProgress {
@@ -59,6 +60,7 @@ pub trait MemoryOps {
     }
 }
 
+#[derive(Debug)]
 pub struct Mmu {
     wram: [u8; 8192],
     hram: [u8; 127],
@@ -97,26 +99,24 @@ impl Mmu {
                 offset: 0,
                 base_address,
             };
-        } else {
-            if let Dma::InProgress {
-                stored_value,
-                offset,
-                base_address,
-            } = self.dma
-            {
-                self.write_byte(map::OAM_START + offset as u16, stored_value);
-                let offset = offset + 1;
-                let stored_value = self.read_byte(base_address + offset as u16);
-                self.dma = if offset < Ppu::OAM_SIZE as u8 {
-                    Dma::InProgress {
-                        stored_value,
-                        offset,
-                        base_address,
-                    }
-                } else {
-                    Dma::None
-                };
-            }
+        } else if let Dma::InProgress {
+            stored_value,
+            offset,
+            base_address,
+        } = self.dma
+        {
+            self.write_byte(map::OAM_START + offset as u16, stored_value);
+            let offset = offset + 1;
+            let stored_value = self.read_byte(base_address + offset as u16);
+            self.dma = if offset < Ppu::OAM_SIZE as u8 {
+                Dma::InProgress {
+                    stored_value,
+                    offset,
+                    base_address,
+                }
+            } else {
+                Dma::None
+            };
         }
     }
 
@@ -167,7 +167,7 @@ impl MemoryOps for Mmu {
             PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.write_registers(address, value),
             DISABLE_BOOTROM => {
                 if value != 0 {
-                    self.cartridge.disable_bootrom()
+                    self.cartridge.disable_bootrom();
                 }
             }
             CGB_REGISTERS_START..=CGB_REGISTERS_END => {}

@@ -1,16 +1,17 @@
 use super::{
     lcd_control::{TileDataAddressing, TileMapRange},
-    palette,
+    palette::{self, Palette},
 };
 
 #[derive(Debug, Copy, Clone)]
 enum FetcherAction {
     ReadTile,
     ReadData0 { tile_index: u8 },
-    ReadData1 { data_address: u16, upper_data: u8 },
+    ReadData1 { data_address: u16, data_0: u8 },
     Wait { colors: [palette::Color; 8] },
 }
 
+#[derive(Debug)]
 pub struct Fetcher {
     action: FetcherAction,
     waiting_cycle: bool,
@@ -38,6 +39,7 @@ impl Fetcher {
         fifo: &mut PixelFifo,
         tile_map: TileMapRange,
         addressing: TileDataAddressing,
+        palette: Palette,
         line_y: u8,
         scroll_y: u8,
         vram: &[u8],
@@ -64,15 +66,15 @@ impl Fetcher {
                 let data_address = addressing.address_from_index(tile_index, line);
                 self.action = FetcherAction::ReadData1 {
                     data_address,
-                    upper_data: vram[data_address as usize],
+                    data_0: vram[data_address as usize],
                 };
             }
             FetcherAction::ReadData1 {
                 data_address,
-                upper_data,
+                data_0,
             } => {
-                let data = (upper_data as u16) << 8 | vram[data_address as usize + 1] as u16;
-                let colors = palette::Color::from_packed(data);
+                let data_1 = vram[data_address as usize + 1];
+                let colors = palette::Color::from_packed(data_0, data_1, palette);
                 self.action = if fifo.push_line(&colors) {
                     FetcherAction::ReadTile
                 } else {
@@ -88,6 +90,7 @@ impl Fetcher {
     }
 }
 
+#[derive(Debug)]
 pub struct PixelFifo {
     fifo: [palette::Color; Self::SIZE],
     start: usize,

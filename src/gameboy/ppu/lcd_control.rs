@@ -22,9 +22,9 @@ pub enum TileDataAddressing {
 impl TileDataAddressing {
     pub fn address_from_index(&self, index: u8, line: u16) -> u16 {
         match self {
-            TileDataAddressing::Unsigned => (index as u16 + (line % 8)) * 2,
+            TileDataAddressing::Unsigned => (index as u16 * 16) + (line % 8) * 2,
             TileDataAddressing::Signed => {
-                0x1000u16.wrapping_add((index as i8 as i16 * 2) as u16) + (line % 8) * 2
+                0x1000u16.wrapping_add((index as i8 as i16 * 16) as u16) + (line % 8) * 2
             }
         }
     }
@@ -45,6 +45,7 @@ impl SpriteSize {
     }
 }
 
+#[derive(Debug)]
 pub struct LcdControl {
     pub lcd_enable: bool,
     pub window_tile_map: TileMapRange,
@@ -59,7 +60,7 @@ pub struct LcdControl {
 impl LcdControl {
     pub fn new() -> Self {
         Self {
-            lcd_enable: true,
+            lcd_enable: false,
             window_tile_map: TileMapRange::Low,
             window_enable: false,
             bg_window_addressing: TileDataAddressing::Unsigned,
@@ -89,21 +90,23 @@ impl LcdControl {
         };
         self.window_enable = value & (1 << 5) != 0;
         self.bg_window_addressing = if value & (1 << 4) == 0 {
-            TileDataAddressing::Unsigned
-        } else {
             TileDataAddressing::Signed
+        } else {
+            TileDataAddressing::Unsigned
         };
-        self.bg_tile_map = if value & (1 << 3) != 0 {
+        self.bg_tile_map = if value & (1 << 3) == 0 {
             TileMapRange::Low
         } else {
             TileMapRange::High
         };
-        self.obj_size = if value & (1 << 2) != 0 {
+        self.obj_size = if value & (1 << 2) == 0 {
             SpriteSize::S8x8
         } else {
             SpriteSize::S8x16
         };
         self.obj_enable = value & (1 << 1) != 0;
         self.bg_window_enable = value & 1 != 0;
+
+        eprintln!("{:?}", &self);
     }
 }

@@ -31,12 +31,14 @@ impl Button {
     }
 }
 
+#[derive(Debug)]
 enum InputLine {
     Directions,
     Buttons,
     Both,
 }
 
+#[derive(Debug)]
 pub struct Buttons {
     directions: u8,
     buttons: u8,
@@ -113,11 +115,13 @@ impl InputClock {
     }
 }
 
+#[derive(Debug)]
 enum TimerState {
     Normal,
     Overflowed,
 }
 
+#[derive(Debug)]
 struct Timer {
     divider: u16,
     counter: u8,
@@ -231,6 +235,7 @@ mod map {
     pub const INTERRUPT_FLAGS: u16 = 0xFF0F;
 }
 
+#[derive(Debug)]
 pub struct Io {
     pub(super) buttons: Buttons,
     timer: Timer,
@@ -279,8 +284,8 @@ impl Io {
         use map::*;
         match address {
             BUTTONS => self.buttons.write(value),
-            SERIAL_TRANSFER => println!("ST {:x}", value),
-            SERIAL_CONTROL => println!("SC {:x}", value),
+            SERIAL_TRANSFER => {}
+            SERIAL_CONTROL => {}
             UNUSED => {}
             TIMER_START..=TIMER_END => self.timer.write(address, value),
             INTERRUPT_FLAGS => self.interrupt_flags = FlagSet::new_truncated(value),

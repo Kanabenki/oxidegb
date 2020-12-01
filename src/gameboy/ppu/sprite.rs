@@ -1,13 +1,16 @@
+#[derive(Debug)]
 pub enum Palette {
     Obp0,
     Obp1,
 }
 
+#[derive(Debug)]
 pub enum Priority {
     AboveBg,
     BehindBg,
 }
 
+#[derive(Debug)]
 pub struct Attributes {
     pub x: u8,
     pub y: u8,
