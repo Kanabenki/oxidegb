@@ -107,10 +107,10 @@ enum InputClock {
 impl InputClock {
     fn bit(&self) -> u16 {
         match self {
-            InputClock::CpuDiv1024 => (1 << 10),
-            InputClock::CpuDiv16 => (1 << 4),
-            InputClock::CpuDiv64 => (1 << 6),
-            InputClock::CpuDiv256 => (1 << 8),
+            InputClock::CpuDiv1024 => 1 << 10,
+            InputClock::CpuDiv16 => 1 << 4,
+            InputClock::CpuDiv64 => 1 << 6,
+            InputClock::CpuDiv256 => 1 << 8,
         }
     }
 }

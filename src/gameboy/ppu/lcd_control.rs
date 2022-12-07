@@ -106,7 +106,5 @@ impl LcdControl {
         };
         self.obj_enable = value & (1 << 1) != 0;
         self.bg_window_enable = value & 1 != 0;
-
-        eprintln!("{:?}", &self);
     }
 }

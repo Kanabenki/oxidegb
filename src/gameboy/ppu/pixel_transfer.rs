@@ -82,7 +82,7 @@ impl Fetcher {
                 };
             }
             FetcherAction::Wait { ref colors } => {
-                if fifo.push_line(&colors) {
+                if fifo.push_line(colors) {
                     self.action = FetcherAction::ReadTile;
                 }
             }

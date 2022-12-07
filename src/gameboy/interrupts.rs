@@ -1,4 +1,4 @@
-use flagset::{flags, FlagSet};
+use flagset::flags;
 
 flags! {
     pub enum Interrupt: u8 {

@@ -66,7 +66,7 @@ pub struct Mmu {
     hram: [u8; 127],
     pub(super) ppu: Ppu,
     pub(super) io: Io,
-    cartridge: Cartridge,
+    pub(super) cartridge: Cartridge,
     dma: Dma,
     interrupt_enable: FlagSet<Interrupt>,
     ie_value: u8,

@@ -36,9 +36,9 @@ impl From<palette::Color> for Color {
     }
 }
 
-impl Into<[u8; 4]> for Color {
-    fn into(self) -> [u8; 4] {
-        self.0
+impl From<Color> for [u8; 4] {
+    fn from(val: Color) -> Self {
+        val.0
     }
 }
 
@@ -261,7 +261,7 @@ impl Ppu {
 
     pub fn write_vram(&mut self, address: u16, value: u8) {
         match self.stat.mode {
-            Mode::OamSearch | Mode::HBlank | Mode::VBlank => self.vram[address as usize] = value, //eprintln!("VRAM WRITE {:X} at {:X}", value, address);
+            Mode::OamSearch | Mode::HBlank | Mode::VBlank => self.vram[address as usize] = value,
             Mode::PixelTransfer => {}
         }
     }

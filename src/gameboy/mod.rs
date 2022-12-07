@@ -37,6 +37,10 @@ impl Gameboy {
         self.cpu.mmu.ppu.screen()
     }
 
+    pub fn rom_header(&self) -> &cartridge::Header {
+        self.cpu.mmu.cartridge.header()
+    }
+
     pub fn set_button(&mut self, button: Button, set: bool) {
         self.cpu.mmu.io.buttons.set_button(button, set);
     }

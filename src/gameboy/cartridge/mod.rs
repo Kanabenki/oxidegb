@@ -7,19 +7,19 @@ use self::{mbc1::Mbc1, rom_only::RomOnly};
 use crate::error::Error;
 
 #[derive(Debug)]
-enum Destination {
+pub enum Destination {
     Japanese,
     NonJapanese,
 }
 
 #[derive(Debug)]
-struct Header {
-    title: String,
-    rom_size: u32,
-    rom_bank_count: u32,
-    ram_size: u32,
-    ram_bank_count: u32,
-    destination: Destination,
+pub struct Header {
+    pub title: String,
+    pub rom_size: u32,
+    pub rom_bank_count: u32,
+    pub ram_size: u32,
+    pub ram_bank_count: u32,
+    pub destination: Destination,
 }
 
 impl Header {
@@ -127,6 +127,10 @@ impl Cartridge {
             rom,
             ram,
         })
+    }
+
+    pub fn header(&self) -> &Header {
+        &self.header
     }
 
     pub fn disable_bootrom(&mut self) {

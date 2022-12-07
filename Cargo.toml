@@ -2,14 +2,12 @@
 name = "oxidegb"
 version = "0.1.0"
 authors = ["Kanabenki <lucien.menassol@gmail.com>"]
-edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+edition = "2021"
 
 [dependencies]
-pixels = "0.2.0"
-winit = "0.22.2"
-flagset = "0.3.0"
-enum_dispatch = "0.3.4"
-anyhow = "1.0.34"
-structopt = "0.3.20"
+pixels = "0.10.0"
+winit = "0.27.5"
+flagset = "0.4.3"
+enum_dispatch = "0.3.8"
+color-eyre = "0.6.2"
+clap = { version = "4.0.29", features = ["derive"] }
