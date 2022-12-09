@@ -22,7 +22,7 @@ pub enum DmaRequest {
     Start(u8),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Color([u8; 4]);
 
 impl From<palette::Color> for Color {
@@ -39,6 +39,12 @@ impl From<palette::Color> for Color {
 impl From<Color> for [u8; 4] {
     fn from(val: Color) -> Self {
         val.0
+    }
+}
+
+impl From<[u8; 4]> for Color {
+    fn from(val: [u8; 4]) -> Self {
+        Self(val)
     }
 }
 
@@ -243,7 +249,6 @@ impl Ppu {
                     [self.x_pos as usize + (self.line_y as usize * Self::LCD_SIZE_X as usize)] =
                     color.into();
                 self.x_pos += 1;
-                //eprintln!("X = {}", self.x_pos);
             }
         }
     }

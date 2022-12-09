@@ -196,6 +196,7 @@ impl Cpu {
 
     fn add_a_generic(&mut self, added: u8, with_carry: bool) {
         self.registers.flags.set_negative(false);
+        let carry_bit = u8::from(with_carry && self.registers.flags.carry());
         self.registers.flags.update_half_carry_u8(
             self.registers.a,
             added,
@@ -205,7 +206,6 @@ impl Cpu {
         self.registers
             .flags
             .update_carry_u8(self.registers.a, added, with_carry, FlagOp::Carry);
-        let carry_bit = u8::from(with_carry && self.registers.flags.carry());
         let value = (Wr(self.registers.a) + Wr(added) + Wr(carry_bit)).0;
         self.registers.flags.update_zero(value);
         self.registers.a = value;
@@ -235,6 +235,7 @@ impl Cpu {
 
     fn sub_a_generic(&mut self, subbed: u8, with_carry: bool) {
         self.registers.flags.set_negative(true);
+        let carry_bit = u8::from(with_carry && self.registers.flags.carry());
         self.registers.flags.update_half_carry_u8(
             self.registers.a,
             subbed,
@@ -244,7 +245,6 @@ impl Cpu {
         self.registers
             .flags
             .update_carry_u8(self.registers.a, subbed, with_carry, FlagOp::Borrow);
-        let carry_bit = u8::from(with_carry && self.registers.flags.carry());
         let value = (Wr(self.registers.a) - Wr(subbed) - Wr(carry_bit)).0;
         self.registers.flags.update_zero(value);
         self.registers.a = value;

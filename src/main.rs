@@ -32,8 +32,7 @@ impl Emulator {
             .with_title("Oxidegb")
             .with_inner_size(LogicalSize::new(160 * scale, 144 * scale))
             .with_resizable(false)
-            .build(&event_loop)
-            .unwrap();
+            .build(&event_loop)?;
 
         let pixels = {
             let window_size = window.inner_size();
