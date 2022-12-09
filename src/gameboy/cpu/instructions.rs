@@ -9,10 +9,10 @@ use crate::gameboy::mmu::MemoryOps;
 impl Cpu {
     #[rustfmt::skip]
     pub(super) const OPCODE_TABLE: [fn(&mut Self, u8); 256] = [
-        Self::nop,       Self::ld_rr_u16, Self::ld_mrr_a,    Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::rlca,    Self::ld_mu16_sp, Self::add_hl_rr, Self::ld_a_mrr,    Self::dec_rr,    Self::inc_r,     Self::dec_r,    Self::ld_r_u8,  Self::rrca,
-        Self::stop,      Self::ld_rr_u16, Self::ld_mrr_a,    Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::rla,     Self::jr_i8,      Self::add_hl_rr, Self::ld_a_mrr,    Self::dec_rr,    Self::inc_r,     Self::dec_r,    Self::ld_r_u8,  Self::rra,
-        Self::jr_cc,     Self::ld_rr_u16, Self::ld_mhlinc_a, Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::daa,     Self::jr_cc,      Self::add_hl_rr, Self::ld_a_mhlinc, Self::dec_rr,    Self::inc_r,     Self::dec_r,    Self::ld_r_u8,  Self::cpl,
-        Self::jr_cc,     Self::ld_rr_u16, Self::ld_mhldec_a, Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::scf,     Self::jr_cc,      Self::add_hl_rr, Self::ld_a_mhldec, Self::dec_rr,    Self::inc_r,     Self::dec_r,    Self::ld_r_u8,  Self::ccf,
+        Self::nop,       Self::ld_rr_u16, Self::ld_mrr_a,    Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::rlca,    Self::ld_mu16_sp, Self::add_hl_rr, Self::ld_a_mrr,    Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::rrca,
+        Self::stop,      Self::ld_rr_u16, Self::ld_mrr_a,    Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::rla,     Self::jr_i8,      Self::add_hl_rr, Self::ld_a_mrr,    Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::rra,
+        Self::jr_cc,     Self::ld_rr_u16, Self::ld_mhlinc_a, Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::daa,     Self::jr_cc,      Self::add_hl_rr, Self::ld_a_mhlinc, Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::cpl,
+        Self::jr_cc,     Self::ld_rr_u16, Self::ld_mhldec_a, Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::scf,     Self::jr_cc,      Self::add_hl_rr, Self::ld_a_mhldec, Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::ccf,
         Self::ld_r_r,    Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,   Self::ld_r_r,  Self::ld_r_r,     Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,   Self::ld_r_r,   Self::ld_r_r,
         Self::ld_r_r,    Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,   Self::ld_r_r,  Self::ld_r_r,     Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,   Self::ld_r_r,   Self::ld_r_r,
         Self::ld_r_r,    Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,   Self::ld_r_r,  Self::ld_r_r,     Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,   Self::ld_r_r,   Self::ld_r_r,
@@ -571,16 +571,22 @@ impl Cpu {
 
     fn rlc(&mut self, opcode: u8) {
         let index = RegisterIndex::from_opcode_second(opcode);
-        let value = self.r(index);
-        self.registers.flags.set_carry(value >> 7 != 0);
-        self.set_r(index, value.rotate_left(1));
+        let old_value = self.r(index);
+        let value = old_value.rotate_left(1);
+        self.registers.flags.clear();
+        self.registers.flags.set_carry(old_value >> 7 != 0);
+        self.registers.flags.update_zero(value);
+        self.set_r(index, value);
     }
 
     fn rrc(&mut self, opcode: u8) {
         let index = RegisterIndex::from_opcode_second(opcode);
-        let value = self.r(index);
-        self.registers.flags.set_carry(value & 0b1 != 0);
-        self.set_r(index, value.rotate_right(1));
+        let old_value = self.r(index);
+        let value = old_value.rotate_right(1);
+        self.registers.flags.clear();
+        self.registers.flags.set_carry(old_value & 0b1 != 0);
+        self.registers.flags.update_zero(value);
+        self.set_r(index, value);
     }
 
     fn rl(&mut self, opcode: u8) {
@@ -618,7 +624,7 @@ impl Cpu {
     fn sra(&mut self, opcode: u8) {
         let index = RegisterIndex::from_opcode_second(opcode);
         let old_value = self.r(index);
-        let value = (old_value >> 1) & (old_value & 0x80);
+        let value = (old_value >> 1) | (old_value & 0x80);
         self.registers.flags.clear();
         self.registers.flags.set_carry(old_value & 0b1 != 0);
         self.registers.flags.update_zero(value);
