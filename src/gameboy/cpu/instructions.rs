@@ -118,15 +118,18 @@ impl Cpu {
     }
 
     fn ld_hl_spu8(&mut self, _opcode: u8) {
+        self.registers.flags.clear();
         let sp_value = self.registers.sp;
         let u8_value = self.fetch_byte_pc() as i8 as u16;
-        self.registers.flags.clear();
         self.registers
             .flags
-            .update_carry_u16(sp_value, u8_value, FlagOp::Carry);
-        self.registers
-            .flags
-            .update_half_carry_u16(sp_value, u8_value, FlagOp::Carry);
+            .update_carry_u8(sp_value as u8, u8_value as u8, false, FlagOp::Carry);
+        self.registers.flags.update_half_carry_u8(
+            sp_value as u8,
+            u8_value as u8,
+            false,
+            FlagOp::Carry,
+        );
         self.registers.set_hl((Wr(sp_value) + Wr(u8_value)).0);
     }
 
