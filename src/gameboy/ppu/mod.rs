@@ -145,7 +145,7 @@ impl Ppu {
             return (FlagSet::new_truncated(0), DmaRequest::None);
         }
 
-        let mut interrupts = FlagSet::new_truncated(0);
+        let mut interrupts = FlagSet::default();
 
         match self.stat.mode {
             Mode::OamSearch => {

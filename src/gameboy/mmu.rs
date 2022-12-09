@@ -21,6 +21,7 @@ mod map {
     pub const IO_START: u16 = 0xFF00;
     pub const IO_END: u16 = 0xFF07;
     pub const SPU_REGISTERS_START: u16 = 0xFF08;
+    pub const INTERRUPT_FLAGS: u16 = 0xFF0F;
     pub const SPU_REGISTERS_END: u16 = 0xFF3F;
     pub const PPU_REGISTERS_START: u16 = 0xFF40;
     pub const PPU_REGISTERS_END: u16 = 0xFF4F;
@@ -29,7 +30,7 @@ mod map {
     pub const CGB_REGISTERS_END: u16 = 0xFF7F;
     pub const HRAM_START: u16 = 0xFF80;
     pub const HRAM_END: u16 = 0xFFFE;
-    pub const IE: u16 = 0xFFFF;
+    pub const INTERRUPT_ENABLE: u16 = 0xFFFF;
 }
 
 #[derive(Debug)]
@@ -68,7 +69,9 @@ pub struct Mmu {
     pub(super) io: Io,
     pub(super) cartridge: Cartridge,
     dma: Dma,
+    interrupt_flags: FlagSet<Interrupt>,
     interrupt_enable: FlagSet<Interrupt>,
+    if_value: u8,
     ie_value: u8,
 }
 
@@ -81,7 +84,9 @@ impl Mmu {
             io: Io::new(),
             cartridge: Cartridge::new(rom, bootrom)?,
             dma: Dma::None,
-            interrupt_enable: FlagSet::new_truncated(0),
+            interrupt_flags: FlagSet::default(),
+            interrupt_enable: FlagSet::default(),
+            if_value: 0,
             ie_value: 0,
         })
     }
@@ -89,7 +94,7 @@ impl Mmu {
     pub fn tick(&mut self) {
         let io_interrupts = self.io.tick();
         let (ppu_interrupts, dma) = self.ppu.tick();
-        self.io.interrupt_flags = io_interrupts | ppu_interrupts;
+        self.interrupt_flags |= io_interrupts | ppu_interrupts;
 
         if let DmaRequest::Start(high_byte) = dma {
             let base_address = (high_byte as u16) << 8;
@@ -121,11 +126,11 @@ impl Mmu {
     }
 
     pub fn interrupts(&self) -> FlagSet<Interrupt> {
-        self.io.interrupt_flags & self.interrupt_enable
+        self.interrupt_flags & self.interrupt_enable
     }
 
     pub fn reset_interrupt(&mut self, interrupt: Interrupt) {
-        self.io.interrupt_flags &= !interrupt;
+        self.interrupt_flags &= !interrupt;
     }
 }
 
@@ -141,12 +146,13 @@ impl MemoryOps for Mmu {
             OAM_START..=OAM_END => self.ppu.read_oam(address - OAM_START),
             UNUSED_START..=UNUSED_END => 0xFF,
             IO_START..=IO_END => self.io.read(address),
+            INTERRUPT_FLAGS => self.interrupt_enable.bits() | (self.if_value & 0b11100000),
             SPU_REGISTERS_START..=SPU_REGISTERS_END => 0xFF,
             PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.read_registers(address),
             DISABLE_BOOTROM => 0xFF,
             CGB_REGISTERS_START..=CGB_REGISTERS_END => 0xFF,
             HRAM_START..=HRAM_END => self.hram[(address - HRAM_START) as usize],
-            IE => self.interrupt_enable.bits() | (self.ie_value & 0b11100000),
+            INTERRUPT_ENABLE => self.interrupt_enable.bits() | (self.ie_value & 0b11100000),
         }
     }
 
@@ -163,6 +169,10 @@ impl MemoryOps for Mmu {
             OAM_START..=OAM_END => self.ppu.write_oam(address - OAM_START, value),
             UNUSED_START..=UNUSED_END => (),
             IO_START..=IO_END => self.io.write(address, value),
+            INTERRUPT_FLAGS => {
+                self.interrupt_enable = FlagSet::new_truncated(value);
+                self.if_value = value;
+            }
             SPU_REGISTERS_START..=SPU_REGISTERS_END => {}
             PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.write_registers(address, value),
             DISABLE_BOOTROM => {
@@ -172,7 +182,7 @@ impl MemoryOps for Mmu {
             }
             CGB_REGISTERS_START..=CGB_REGISTERS_END => {}
             HRAM_START..=HRAM_END => self.hram[(address - HRAM_START) as usize] = value,
-            IE => {
+            INTERRUPT_ENABLE => {
                 self.interrupt_enable = FlagSet::new_truncated(value);
                 self.ie_value = value;
             }

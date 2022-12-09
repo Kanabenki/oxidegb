@@ -53,8 +53,9 @@ impl Cpu {
     pub fn next_instruction(&mut self) -> u32 {
         if self.registers.ime {
             if let Some(interrupt) = self.mmu.interrupts().into_iter().next() {
+                dbg!("ok2");
                 self.push_stack(self.registers.pc);
-                self.registers.pc = self.read_dbyte(interrupt.address());
+                self.registers.pc = interrupt.address();
                 self.mmu.reset_interrupt(interrupt);
                 self.registers.ime = false;
                 if let ExecutionState::Halt = self.execution_state {

@@ -232,14 +232,12 @@ mod map {
     pub const UNUSED: u16 = 0xFF03;
     pub const TIMER_START: u16 = 0xFF04;
     pub const TIMER_END: u16 = 0xFF07;
-    pub const INTERRUPT_FLAGS: u16 = 0xFF0F;
 }
 
 #[derive(Debug)]
 pub struct Io {
     pub(super) buttons: Buttons,
     timer: Timer,
-    pub interrupt_flags: FlagSet<Interrupt>,
 }
 
 impl Io {
@@ -247,7 +245,6 @@ impl Io {
         Self {
             buttons: Buttons::new(),
             timer: Timer::new(),
-            interrupt_flags: FlagSet::new_truncated(0),
         }
     }
 
@@ -272,7 +269,6 @@ impl Io {
             SERIAL_CONTROL => 0xFF,
             UNUSED => 0xFF,
             TIMER_START..=TIMER_END => self.timer.read(address),
-            INTERRUPT_FLAGS => self.interrupt_flags.bits() | 0b11100000,
             invalid_address => panic!(
                 "Tried to read at invalid io register address 0x{:X}",
                 invalid_address
@@ -288,7 +284,6 @@ impl Io {
             SERIAL_CONTROL => {}
             UNUSED => {}
             TIMER_START..=TIMER_END => self.timer.write(address, value),
-            INTERRUPT_FLAGS => self.interrupt_flags = FlagSet::new_truncated(value),
             invalid_address => panic!(
                 "Tried to write at invalid io register address 0x{:X}",
                 invalid_address
