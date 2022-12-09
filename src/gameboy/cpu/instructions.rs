@@ -292,10 +292,13 @@ impl Cpu {
         let r8_value = self.fetch_byte_pc() as i8 as u16;
         self.registers
             .flags
-            .update_carry_u16(sp_value, r8_value, FlagOp::Carry);
-        self.registers
-            .flags
-            .update_half_carry_u16(sp_value, r8_value, FlagOp::Carry);
+            .update_carry_u8(sp_value as u8, r8_value as u8, false, FlagOp::Carry);
+        self.registers.flags.update_half_carry_u8(
+            sp_value as u8,
+            r8_value as u8,
+            false,
+            FlagOp::Carry,
+        );
         self.registers.sp = (Wr(sp_value) + Wr(r8_value)).0;
     }
 
