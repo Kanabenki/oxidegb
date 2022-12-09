@@ -105,6 +105,8 @@ struct Arguments {
 }
 
 fn main() -> color_eyre::Result<()> {
+    color_eyre::install()?;
+
     let arguments = Arguments::parse();
     let rom = fs::read(arguments.file)?;
     let bootrom = arguments

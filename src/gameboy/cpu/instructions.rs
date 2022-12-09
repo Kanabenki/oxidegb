@@ -421,7 +421,7 @@ impl Cpu {
     }
 
     fn jp_mhl(&mut self, _opcode: u8) {
-        self.registers.pc = self.read_dbyte(self.registers.hl());
+        self.registers.pc = self.registers.hl();
     }
 
     fn jp_cc_u16(&mut self, opcode: u8) {
