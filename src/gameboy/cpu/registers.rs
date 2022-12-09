@@ -106,8 +106,16 @@ impl Flags {
         self.is_set(Flag::Z)
     }
 
+    pub fn negative(&self) -> bool {
+        self.is_set(Flag::N)
+    }
+
     pub fn set_negative(&mut self, set: bool) {
         self.set(Flag::N, set);
+    }
+
+    pub fn half_carry(&self) -> bool {
+        self.is_set(Flag::H)
     }
 
     pub fn set_half_carry(&mut self, set: bool) {

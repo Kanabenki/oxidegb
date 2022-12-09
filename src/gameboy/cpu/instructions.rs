@@ -38,7 +38,7 @@ impl Cpu {
     }
 
     fn halt(&mut self, _opcode: u8) {
-        todo!()
+        self.execution_state = ExecutionState::Halt;
     }
 
     fn ill(&mut self, _opcode: u8) {
@@ -411,7 +411,25 @@ impl Cpu {
     }
 
     fn daa(&mut self, _opcode: u8) {
-        todo!()
+        if !self.registers.flags.negative() {
+            if self.registers.flags.carry() || self.registers.a > 0x99 {
+                self.registers.a = self.registers.a.wrapping_add(0x60);
+                self.registers.flags.set_carry(true);
+            }
+            if self.registers.flags.half_carry() || (self.registers.a & 0x0F) > 0x9 {
+                self.registers.a = self.registers.a.wrapping_add(0x6);
+            }
+        } else {
+            if self.registers.flags.carry() {
+                self.registers.a = self.registers.a.wrapping_sub(0x60);
+            }
+            if self.registers.flags.half_carry() {
+                self.registers.a = self.registers.a.wrapping_sub(0x6);
+            }
+        }
+
+        self.registers.flags.update_zero(self.registers.a);
+        self.registers.flags.set_half_carry(false);
     }
 
     // Control flow operations.

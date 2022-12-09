@@ -12,6 +12,7 @@ enum ExecutionState {
     Continue,
     Stop,
     IllegalInstruction,
+    Halt,
 }
 
 #[derive(Debug)]
@@ -56,6 +57,19 @@ impl Cpu {
                 self.registers.pc = self.read_dbyte(interrupt.address());
                 self.mmu.reset_interrupt(interrupt);
                 self.registers.ime = false;
+                if let ExecutionState::Halt = self.execution_state {
+                    self.execution_state = ExecutionState::Continue;
+                }
+            }
+        }
+
+        // TODO Implement proper behaviour for those.
+        match self.execution_state {
+            ExecutionState::Continue => {}
+            ExecutionState::IllegalInstruction => return self.cycles_count,
+            ExecutionState::Halt | ExecutionState::Stop => {
+                self.mmu.tick();
+                return self.cycles_count;
             }
         }
 
