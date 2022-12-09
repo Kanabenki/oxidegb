@@ -9,10 +9,10 @@ use crate::gameboy::mmu::MemoryOps;
 impl Cpu {
     #[rustfmt::skip]
     pub(super) const OPCODE_TABLE: [fn(&mut Self, u8); 256] = [
-        Self::nop,       Self::ld_rr_u16, Self::ld_mrr_a,    Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::rlca,    Self::ld_mu16_sp, Self::add_hl_rr, Self::ld_a_mrr,    Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::rrca,
-        Self::stop,      Self::ld_rr_u16, Self::ld_mrr_a,    Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::rla,     Self::jr_r8,      Self::add_hl_rr, Self::ld_a_mrr,    Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::rra,
-        Self::jr_cc,     Self::ld_rr_u16, Self::ld_mhlinc_a, Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::daa,     Self::jr_cc,      Self::add_hl_rr, Self::ld_a_mhlinc, Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::cpl,
-        Self::jr_cc,     Self::ld_rr_u16, Self::ld_mhldec_a, Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::scf,     Self::jr_cc,      Self::add_hl_rr, Self::ld_a_mhldec, Self::dec_rr,    Self::inc_r,       Self::dec_r,    Self::ld_r_u8,  Self::ccf,
+        Self::nop,       Self::ld_rr_u16, Self::ld_mrr_a,    Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::rlca,    Self::ld_mu16_sp, Self::add_hl_rr, Self::ld_a_mrr,    Self::dec_rr,    Self::inc_r,     Self::dec_r,    Self::ld_r_u8,  Self::rrca,
+        Self::stop,      Self::ld_rr_u16, Self::ld_mrr_a,    Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::rla,     Self::jr_i8,      Self::add_hl_rr, Self::ld_a_mrr,    Self::dec_rr,    Self::inc_r,     Self::dec_r,    Self::ld_r_u8,  Self::rra,
+        Self::jr_cc,     Self::ld_rr_u16, Self::ld_mhlinc_a, Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::daa,     Self::jr_cc,      Self::add_hl_rr, Self::ld_a_mhlinc, Self::dec_rr,    Self::inc_r,     Self::dec_r,    Self::ld_r_u8,  Self::cpl,
+        Self::jr_cc,     Self::ld_rr_u16, Self::ld_mhldec_a, Self::inc_rr,  Self::inc_r,       Self::dec_r,   Self::ld_r_u8,  Self::scf,     Self::jr_cc,      Self::add_hl_rr, Self::ld_a_mhldec, Self::dec_rr,    Self::inc_r,     Self::dec_r,    Self::ld_r_u8,  Self::ccf,
         Self::ld_r_r,    Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,   Self::ld_r_r,  Self::ld_r_r,     Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,   Self::ld_r_r,   Self::ld_r_r,
         Self::ld_r_r,    Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,   Self::ld_r_r,  Self::ld_r_r,     Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,   Self::ld_r_r,   Self::ld_r_r,
         Self::ld_r_r,    Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,      Self::ld_r_r,  Self::ld_r_r,   Self::ld_r_r,  Self::ld_r_r,     Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,    Self::ld_r_r,      Self::ld_r_r,   Self::ld_r_r,   Self::ld_r_r,
@@ -23,8 +23,8 @@ impl Cpu {
         Self::or_a_r,    Self::or_a_r,    Self::or_a_r,      Self::or_a_r,  Self::or_a_r,      Self::or_a_r,  Self::or_a_r,   Self::or_a_r,  Self::cp_a_r,     Self::cp_a_r,    Self::cp_a_r,      Self::cp_a_r,    Self::cp_a_r,      Self::cp_a_r,   Self::cp_a_r,   Self::cp_a_r,
         Self::ret_cc,    Self::pop_rr,    Self::jp_cc_u16,   Self::jp_u16,  Self::call_cc_u16, Self::push_rr, Self::add_a_u8, Self::rst,     Self::ret_cc,     Self::ret,       Self::jp_cc_u16,   Self::prefix_cb, Self::call_cc_u16, Self::call_u16, Self::adc_a_u8, Self::rst,
         Self::ret_cc,    Self::pop_rr,    Self::jp_cc_u16,   Self::ill,     Self::call_cc_u16, Self::push_rr, Self::sub_a_u8, Self::rst,     Self::ret_cc,     Self::reti,      Self::jp_cc_u16,   Self::ill,       Self::call_cc_u16, Self::ill,      Self::sbc_a_u8, Self::rst,
-        Self::ldh_mu8_a, Self::pop_rr,    Self::ldh_mc_a,    Self::ill,     Self::ill,         Self::push_rr, Self::and_a_u8, Self::rst,     Self::add_sp_r8,  Self::jp_mhl,    Self::ld_mu16_a,   Self::ill,       Self::ill,         Self::ill,      Self::xor_a_u8, Self::rst,
-        Self::ldh_a_mu8, Self::pop_af,    Self::ldh_a_mc,    Self::di,      Self::ill,         Self::push_af, Self::or_a_u8,  Self::rst,     Self::ld_hl_spu8, Self::ld_sp_hl,  Self::ld_a_mu16,   Self::ei,        Self::ill,         Self::ill,      Self::cp_a_u8,  Self::rst
+        Self::ldh_mu8_a, Self::pop_rr,    Self::ldh_mc_a,    Self::ill,     Self::ill,         Self::push_rr, Self::and_a_u8, Self::rst,     Self::add_sp_i8,  Self::jp_mhl,    Self::ld_mu16_a,   Self::ill,       Self::ill,         Self::ill,      Self::xor_a_u8, Self::rst,
+        Self::ldh_a_mu8, Self::pop_af,    Self::ldh_a_mc,    Self::di,      Self::ill,         Self::push_af, Self::or_a_u8,  Self::rst,     Self::ld_hl_spi8, Self::ld_sp_hl,  Self::ld_a_mu16,   Self::ei,        Self::ill,         Self::ill,      Self::cp_a_u8,  Self::rst
         ];
 
     // Opcodes implementations.
@@ -117,7 +117,7 @@ impl Cpu {
         self.write_dbyte(address, self.registers.sp);
     }
 
-    fn ld_hl_spu8(&mut self, _opcode: u8) {
+    fn ld_hl_spi8(&mut self, _opcode: u8) {
         self.registers.flags.clear();
         let sp_value = self.registers.sp;
         let u8_value = self.fetch_byte_pc() as i8 as u16;
@@ -289,20 +289,20 @@ impl Cpu {
         self.registers.set_hl((Wr(hl_value) + Wr(reg_value)).0);
     }
 
-    fn add_sp_r8(&mut self, _opcode: u8) {
+    fn add_sp_i8(&mut self, _opcode: u8) {
         self.registers.flags.clear();
         let sp_value = self.registers.sp;
-        let r8_value = self.fetch_byte_pc() as i8 as u16;
+        let i8_value = self.fetch_byte_pc() as i8 as u16;
         self.registers
             .flags
-            .update_carry_u8(sp_value as u8, r8_value as u8, false, FlagOp::Carry);
+            .update_carry_u8(sp_value as u8, i8_value as u8, false, FlagOp::Carry);
         self.registers.flags.update_half_carry_u8(
             sp_value as u8,
-            r8_value as u8,
+            i8_value as u8,
             false,
             FlagOp::Carry,
         );
-        self.registers.sp = (Wr(sp_value) + Wr(r8_value)).0;
+        self.registers.sp = (Wr(sp_value) + Wr(i8_value)).0;
     }
 
     // Boolean operations.
@@ -455,7 +455,7 @@ impl Cpu {
         }
     }
 
-    fn jr_r8(&mut self, _opcode: u8) {
+    fn jr_i8(&mut self, _opcode: u8) {
         let offset = self.fetch_byte_pc() as i8 as u16;
         self.registers.pc = self.registers.pc.wrapping_add(offset);
     }
