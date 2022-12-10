@@ -18,6 +18,8 @@ enum ExecutionState {
 #[derive(Debug)]
 pub struct Cpu {
     registers: Registers,
+    enable_ime: bool,
+    // TODO cleanup visibility
     pub(super) mmu: Mmu,
     cycles_count: u32,
     execution_state: ExecutionState,
@@ -44,6 +46,7 @@ impl Cpu {
         };
         Ok(Self {
             registers,
+            enable_ime: false,
             mmu: Mmu::new(rom, bootrom)?,
             cycles_count: 0,
             execution_state: ExecutionState::Continue,
@@ -53,7 +56,6 @@ impl Cpu {
     pub fn next_instruction(&mut self) -> u32 {
         if self.registers.ime {
             if let Some(interrupt) = self.mmu.interrupts().into_iter().next() {
-                dbg!("ok2");
                 self.push_stack(self.registers.pc);
                 self.registers.pc = interrupt.address();
                 self.mmu.reset_interrupt(interrupt);
@@ -61,6 +63,8 @@ impl Cpu {
                 if let ExecutionState::Halt = self.execution_state {
                     self.execution_state = ExecutionState::Continue;
                 }
+
+                return self.cycles_count;
             }
         }
 
@@ -74,7 +78,13 @@ impl Cpu {
             }
         }
 
+        if self.enable_ime {
+            self.enable_ime = false;
+            self.registers.ime = true;
+        }
+
         let opcode = self.fetch_byte_pc();
+
         Self::OPCODE_TABLE[opcode as usize](self, opcode);
 
         self.cycles_count
@@ -136,5 +146,9 @@ impl Cpu {
     fn push_stack(&mut self, value: u16) {
         self.registers.sp = self.registers.sp.wrapping_sub(2);
         self.write_dbyte(self.registers.sp, value);
+    }
+
+    pub fn registers(&self) -> &Registers {
+        &self.registers
     }
 }

@@ -20,8 +20,10 @@ mod map {
     pub const UNUSED_END: u16 = 0xFEFF;
     pub const IO_START: u16 = 0xFF00;
     pub const IO_END: u16 = 0xFF07;
-    pub const SPU_REGISTERS_START: u16 = 0xFF08;
+    pub const UNUSED_2_START: u16 = 0xFF08;
+    pub const UNUSED_2_END: u16 = 0xFF0E;
     pub const INTERRUPT_FLAGS: u16 = 0xFF0F;
+    pub const SPU_REGISTERS_START: u16 = 0xFF10;
     pub const SPU_REGISTERS_END: u16 = 0xFF3F;
     pub const PPU_REGISTERS_START: u16 = 0xFF40;
     pub const PPU_REGISTERS_END: u16 = 0xFF4F;
@@ -129,6 +131,14 @@ impl Mmu {
         self.interrupt_flags & self.interrupt_enable
     }
 
+    pub fn interrupt_enable(&self) -> FlagSet<Interrupt> {
+        self.interrupt_enable
+    }
+
+    pub fn interrupt_flags(&self) -> FlagSet<Interrupt> {
+        self.interrupt_flags
+    }
+
     pub fn reset_interrupt(&mut self, interrupt: Interrupt) {
         self.interrupt_flags &= !interrupt;
     }
@@ -146,7 +156,8 @@ impl MemoryOps for Mmu {
             OAM_START..=OAM_END => self.ppu.read_oam(address - OAM_START),
             UNUSED_START..=UNUSED_END => 0xFF,
             IO_START..=IO_END => self.io.read(address),
-            INTERRUPT_FLAGS => self.interrupt_enable.bits() | (self.if_value & 0b11100000),
+            UNUSED_2_START..=UNUSED_2_END => 0xFF,
+            INTERRUPT_FLAGS => self.interrupt_flags.bits() | (self.if_value & 0b11100000),
             SPU_REGISTERS_START..=SPU_REGISTERS_END => 0xFF,
             PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.read_registers(address),
             DISABLE_BOOTROM => 0xFF,
@@ -167,10 +178,11 @@ impl MemoryOps for Mmu {
                 self.wram[(address - ECHO_WRAM_START) as usize] = value
             }
             OAM_START..=OAM_END => self.ppu.write_oam(address - OAM_START, value),
-            UNUSED_START..=UNUSED_END => (),
+            UNUSED_START..=UNUSED_END => {}
             IO_START..=IO_END => self.io.write(address, value),
+            UNUSED_2_START..=UNUSED_2_END => {}
             INTERRUPT_FLAGS => {
-                self.interrupt_enable = FlagSet::new_truncated(value);
+                self.interrupt_flags = FlagSet::new_truncated(value);
                 self.if_value = value;
             }
             SPU_REGISTERS_START..=SPU_REGISTERS_END => {}

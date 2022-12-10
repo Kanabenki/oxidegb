@@ -21,7 +21,12 @@ struct Emulator {
 }
 
 impl Emulator {
-    fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>, scale: u32) -> color_eyre::Result<Self> {
+    fn new(
+        rom: Vec<u8>,
+        bootrom: Option<Vec<u8>>,
+        scale: u32,
+        debug: bool,
+    ) -> color_eyre::Result<Self> {
         if !(1..=8).contains(&scale) {
             return Err(eyre!("Scale must be between 1 and 8"));
         }
@@ -43,7 +48,7 @@ impl Emulator {
                 .build()?
         };
 
-        let gameboy = Gameboy::new(rom, bootrom)?;
+        let gameboy = Gameboy::new(rom, bootrom, debug)?;
         let event_loop = Some(event_loop);
 
         Ok(Self {
@@ -101,6 +106,9 @@ struct Arguments {
     /// Display rom header info
     #[arg(short, long)]
     info: bool,
+    /// Enable the debugger
+    #[arg(short, long)]
+    debug: bool,
 }
 
 fn main() -> color_eyre::Result<()> {
@@ -112,7 +120,7 @@ fn main() -> color_eyre::Result<()> {
         .bootrom_file
         .map_or(Ok(None), |bootrom_file| fs::read(bootrom_file).map(Some))?;
     let scale = arguments.scale;
-    let emulator = Emulator::new(rom, bootrom, scale)?;
+    let emulator = Emulator::new(rom, bootrom, scale, arguments.debug)?;
     if arguments.info {
         println!("{:?}", emulator.gameboy.rom_header());
     }

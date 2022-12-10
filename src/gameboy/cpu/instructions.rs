@@ -543,7 +543,7 @@ impl Cpu {
     // Interrupt operations.
 
     fn ei(&mut self, _opcode: u8) {
-        self.registers.ime = true;
+        self.enable_ime = true;
     }
 
     fn di(&mut self, _opcode: u8) {
