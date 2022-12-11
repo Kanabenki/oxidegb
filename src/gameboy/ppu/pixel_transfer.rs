@@ -6,8 +6,8 @@ use super::{
 #[derive(Debug, Copy, Clone)]
 enum FetcherAction {
     ReadTile,
-    ReadData0 { tile_index: u8 },
-    ReadData1 { data_address: u16, data_0: u8 },
+    ReadDataH { tile_index: u8 },
+    ReadDataL { data_address: u16, data_h: u8 },
     Wait { colors: [palette::Color; 8] },
 }
 
@@ -54,7 +54,7 @@ impl Fetcher {
 
         match self.action {
             FetcherAction::ReadTile => {
-                self.action = FetcherAction::ReadData0 {
+                self.action = FetcherAction::ReadDataH {
                     tile_index: vram[(tile_map.base_address()
                         + line / 8 * 32
                         + (self.tile_map_index as u16))
@@ -62,19 +62,19 @@ impl Fetcher {
                 };
                 self.tile_map_index = (self.tile_map_index + 1) % Self::TILE_MAP_WIDTH as u8;
             }
-            FetcherAction::ReadData0 { tile_index } => {
+            FetcherAction::ReadDataH { tile_index } => {
                 let data_address = addressing.address_from_index(tile_index, line);
-                self.action = FetcherAction::ReadData1 {
+                self.action = FetcherAction::ReadDataL {
                     data_address,
-                    data_0: vram[data_address as usize],
+                    data_h: vram[data_address as usize],
                 };
             }
-            FetcherAction::ReadData1 {
+            FetcherAction::ReadDataL {
                 data_address,
-                data_0,
+                data_h,
             } => {
-                let data_1 = vram[data_address as usize + 1];
-                let colors = palette::Color::from_packed(data_0, data_1, palette);
+                let data_l = vram[data_address as usize + 1];
+                let colors = palette::Color::from_packed(data_h, data_l, palette);
                 self.action = if fifo.push_line(&colors) {
                     FetcherAction::ReadTile
                 } else {
