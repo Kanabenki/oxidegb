@@ -15,7 +15,7 @@ impl Default for Color {
 }
 
 impl Color {
-    pub fn from_packed(data_h: u8, data_l: u8, palette: Palette) -> [Self; 8] {
+    pub fn from_packed(data_l: u8, data_h: u8, palette: Palette) -> [Self; 8] {
         let mut colors = [Self::White; 8];
         for i in 0..8 {
             colors[7 - i] = match (((data_h >> i) << 1) & 0b10) | ((data_l >> i) & 0b01) {

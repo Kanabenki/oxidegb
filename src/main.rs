@@ -5,12 +5,12 @@ use color_eyre::eyre::eyre;
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
-    event::{Event, ScanCode, VirtualKeyCode, WindowEvent},
+    event::{ElementState, Event, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
 
-use oxidegb::gameboy::Gameboy;
+use oxidegb::gameboy::{Button, Gameboy};
 
 struct Emulator {
     event_loop: Option<EventLoop<()>>,
@@ -81,8 +81,22 @@ impl Emulator {
                     ..
                 } => {
                     if let Some(key) = input.virtual_keycode {
-                        if key == VirtualKeyCode::P {
-                            self.gameboy.debug_break();
+                        let set: bool = match input.state {
+                            ElementState::Pressed => true,
+                            ElementState::Released => false,
+                        };
+                        // TODO: Inputs are hardcoded for now.
+                        match key {
+                            VirtualKeyCode::P if set => self.gameboy.debug_break(),
+                            VirtualKeyCode::Up => self.gameboy.set_button(Button::Up, set),
+                            VirtualKeyCode::Down => self.gameboy.set_button(Button::Down, set),
+                            VirtualKeyCode::Left => self.gameboy.set_button(Button::Left, set),
+                            VirtualKeyCode::Right => self.gameboy.set_button(Button::Right, set),
+                            VirtualKeyCode::J => self.gameboy.set_button(Button::B, set),
+                            VirtualKeyCode::K => self.gameboy.set_button(Button::A, set),
+                            VirtualKeyCode::U => self.gameboy.set_button(Button::Select, set),
+                            VirtualKeyCode::I => self.gameboy.set_button(Button::Start, set),
+                            _ => {}
                         }
                     }
                 }
