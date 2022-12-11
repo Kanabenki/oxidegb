@@ -233,8 +233,8 @@ impl Ppu {
     fn tick_pixel_transfer(&mut self) {
         self.bg_fetcher.tick(
             &mut self.bg_pixel_fifo,
-            self.lcdc.bg_tile_map,          //lcd_control::TileMapRange::Low, //
-            self.lcdc.bg_window_addressing, // lcd_control::TileDataAddressing::Unsigned,  //
+            self.lcdc.bg_tile_map,
+            self.lcdc.bg_window_addressing,
             self.bg_palette,
             self.line_y,
             self.scroll_y,

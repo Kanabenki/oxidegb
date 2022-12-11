@@ -31,11 +31,11 @@ impl Button {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum InputLine {
-    Directions,
-    Buttons,
-    Both,
+    Directions = 0b0001_0000,
+    Buttons = 0b0010_0000,
+    Both = 0b0011_0000,
 }
 
 #[derive(Debug)]
@@ -58,9 +58,9 @@ impl Buttons {
 
     const fn read(&self) -> u8 {
         match self.current_line {
-            InputLine::Directions => (self.directions & 0xF) & 0xE0,
-            InputLine::Buttons => (self.buttons & 0xF) & 0xD0,
-            InputLine::Both => (self.buttons | self.directions & 0xF) & 0xC,
+            InputLine::Directions => (self.directions & 0xF) | self.current_line as u8,
+            InputLine::Buttons => (self.buttons & 0xF) | self.current_line as u8,
+            InputLine::Both => ((self.buttons | self.directions) & 0xF) | self.current_line as u8,
         }
     }
 
