@@ -149,28 +149,30 @@ impl Timer {
     }
 
     fn tick(&mut self) -> bool {
-        let new_divider = self.divider.wrapping_add(4);
+        let old_divider = self.divider;
+        self.divider = self.divider.wrapping_add(4);
+
+        if !self.enabled {
+            return false;
+        }
 
         match self.state {
             TimerState::Normal => {
-                if self.enabled && (new_divider ^ self.divider) & self.input_clock.bit() != 0 {
+                if (old_divider ^ self.divider) & self.input_clock.bit() != 0 {
                     self.increase_counter();
-
-                    return false;
                 }
+                false
             }
             TimerState::Overflowed => {
                 self.counter = self.modulo;
                 self.state = TimerState::Normal;
-                return true;
+                true
             }
         }
-
-        false
     }
 
     fn increase_counter(&mut self) {
-        let (counter, overflowed) = self.modulo.overflowing_add(1);
+        let (counter, overflowed) = self.counter.overflowing_add(1);
         self.counter = counter;
 
         if overflowed {
@@ -184,6 +186,7 @@ impl Timer {
             Self::COUNTER_ADDRESS => self.counter,
             Self::MODULO_ADDRESS => self.modulo,
             Self::CONTROL_ADDRESS => {
+                // TODO check read/write behaviour of unused bits.
                 0b1111_1000 | (u8::from(self.enabled) << 2) | self.input_clock as u8
             }
             _ => panic!("Tried to read timer register out of range"),

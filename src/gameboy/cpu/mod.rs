@@ -54,26 +54,29 @@ impl Cpu {
     }
 
     pub fn next_instruction(&mut self) -> u32 {
+        // TODO Ensure proper behaviour for those.
+        match self.execution_state {
+            ExecutionState::Continue => {}
+            ExecutionState::Halt => {
+                if self.mmu.interrupts().is_empty() {
+                    self.mmu.tick();
+                    return self.cycles_count;
+                } else {
+                    self.execution_state = ExecutionState::Continue;
+                }
+            }
+            ExecutionState::Stop => todo!(),
+            ExecutionState::IllegalInstruction => return self.cycles_count,
+        }
+
         if self.registers.ime {
+            // TODO: Check interrupt handling priority.
             if let Some(interrupt) = self.mmu.interrupts().into_iter().next() {
                 self.push_stack(self.registers.pc);
                 self.registers.pc = interrupt.address();
                 self.mmu.reset_interrupt(interrupt);
                 self.registers.ime = false;
-                if let ExecutionState::Halt = self.execution_state {
-                    self.execution_state = ExecutionState::Continue;
-                }
 
-                return self.cycles_count;
-            }
-        }
-
-        // TODO Implement proper behaviour for those.
-        match self.execution_state {
-            ExecutionState::Continue => {}
-            ExecutionState::IllegalInstruction => return self.cycles_count,
-            ExecutionState::Halt | ExecutionState::Stop => {
-                self.mmu.tick();
                 return self.cycles_count;
             }
         }
