@@ -198,8 +198,9 @@ impl Ppu {
                 0..=Self::LAST_VISIBLE_LINE => self.stat.mode = Mode::OamSearch,
                 Self::LCD_SIZE_Y => {
                     self.stat.mode = Mode::VBlank;
+                    interrupts |= Interrupt::VBlank;
                     if self.stat.vblank_interrupt_enabled() {
-                        interrupts |= Interrupt::VBlank;
+                        interrupts |= Interrupt::LcdStat;
                     }
                 }
                 _ => {}

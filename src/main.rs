@@ -5,7 +5,7 @@ use color_eyre::eyre::eyre;
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
-    event::{Event, WindowEvent},
+    event::{Event, ScanCode, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
@@ -74,6 +74,16 @@ impl Emulator {
                     }
                     if self.pixels.render().is_err() {
                         *control_flow = ControlFlow::Exit;
+                    }
+                }
+                Event::WindowEvent {
+                    event: WindowEvent::KeyboardInput { input, .. },
+                    ..
+                } => {
+                    if let Some(key) = input.virtual_keycode {
+                        if key == VirtualKeyCode::P {
+                            self.gameboy.debug_break();
+                        }
                     }
                 }
                 Event::WindowEvent {

@@ -14,11 +14,12 @@ pub use io::Button;
 
 struct DebugStatus {
     breakpoints: Vec<u16>,
+    should_break: bool,
 }
 
 pub struct Gameboy {
     cpu: Cpu,
-    debug_status: Option<DebugStatus>,
+    debug_status: DebugStatus,
 }
 
 impl Gameboy {
@@ -26,9 +27,10 @@ impl Gameboy {
 
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>, debug: bool) -> Result<Self, Error> {
         let cpu = Cpu::new(rom, bootrom)?;
-        let debug_status = debug.then(|| DebugStatus {
-            breakpoints: vec![cpu.registers().pc],
-        });
+        let debug_status = DebugStatus {
+            breakpoints: vec![],
+            should_break: debug,
+        };
         Ok(Self { cpu, debug_status })
     }
 
@@ -55,13 +57,20 @@ impl Gameboy {
         self.cpu.mmu.io.buttons.set_button(button, set);
     }
 
+    pub fn debug_break(&mut self) {
+        self.debug_status.should_break = true;
+    }
+
     fn run_debugger(&mut self) {
-        let Some(status) = &mut self.debug_status else {
-            return;
-        };
-        if !status.breakpoints.contains(&self.cpu.registers().pc) {
+        if !self
+            .debug_status
+            .breakpoints
+            .contains(&self.cpu.registers().pc)
+            && !self.debug_status.should_break
+        {
             return;
         }
+        self.debug_status.should_break = false;
         let mut buf = String::new();
         loop {
             let pc = self.cpu.registers().pc;
@@ -85,8 +94,8 @@ impl Gameboy {
                                 println!("Invalid address \"{address}\"");
                                 continue;
                             };
-                    if !status.breakpoints.contains(&address) {
-                        status.breakpoints.push(address);
+                    if !self.debug_status.breakpoints.contains(&address) {
+                        self.debug_status.breakpoints.push(address);
                     }
                 }
                 (Some("d" | "delete"), Some(address)) => {
@@ -99,18 +108,18 @@ impl Gameboy {
                                 println!("Invalid address \"{address}\"");
                                 continue;
                             };
-                    status.breakpoints.retain(|&a| a != address);
+                    self.debug_status.breakpoints.retain(|&a| a != address);
                 }
                 (Some("l" | "list"), _) => {
                     println!(
                         "{}",
-                        if status.breakpoints.is_empty() {
+                        if self.debug_status.breakpoints.is_empty() {
                             "Current breakpoints:"
                         } else {
                             "No breakpoints"
                         }
                     );
-                    for breakpoint in &status.breakpoints {
+                    for breakpoint in &self.debug_status.breakpoints {
                         println!("0x{breakpoint:04X}");
                     }
                 }
