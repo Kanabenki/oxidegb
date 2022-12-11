@@ -148,7 +148,7 @@ impl Cpu {
         self.write_dbyte(self.registers.sp, value);
     }
 
-    pub fn registers(&self) -> &Registers {
+    pub const fn registers(&self) -> &Registers {
         &self.registers
     }
 }

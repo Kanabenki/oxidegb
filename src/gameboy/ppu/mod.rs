@@ -253,11 +253,11 @@ impl Ppu {
         }
     }
 
-    pub fn screen(&self) -> &[Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize] {
+    pub const fn screen(&self) -> &[Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize] {
         &self.screen
     }
 
-    pub fn read_vram(&self, address: u16) -> u8 {
+    pub const fn read_vram(&self, address: u16) -> u8 {
         match self.stat.mode {
             Mode::OamSearch | Mode::HBlank | Mode::VBlank => self.vram[address as usize],
             Mode::PixelTransfer => 0xFF,
@@ -271,7 +271,7 @@ impl Ppu {
         }
     }
 
-    pub fn read_oam(&self, address: u16) -> u8 {
+    pub const fn read_oam(&self, address: u16) -> u8 {
         match self.stat.mode {
             Mode::HBlank | Mode::VBlank => self.oam[address as usize],
             Mode::OamSearch | Mode::PixelTransfer => 0xFF,

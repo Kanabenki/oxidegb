@@ -30,7 +30,7 @@ impl LcdStatus {
         }
     }
 
-    pub fn value(&self) -> u8 {
+    pub const fn value(&self) -> u8 {
         (1 << 7)
             | (self.coincidence_interrupt_enabled as u8) << 6
             | (self.oam_interrupt_enabled as u8) << 5
@@ -46,19 +46,19 @@ impl LcdStatus {
         self.hblank_interrupt_enabled = value & (1 << 3) != 0;
     }
 
-    pub fn coincidence_interrupt_enabled(&self) -> bool {
+    pub const fn coincidence_interrupt_enabled(&self) -> bool {
         self.coincidence_interrupt_enabled
     }
 
-    pub fn oam_interrupt_enabled(&self) -> bool {
+    pub const fn oam_interrupt_enabled(&self) -> bool {
         self.oam_interrupt_enabled
     }
 
-    pub fn vblank_interrupt_enabled(&self) -> bool {
+    pub const fn vblank_interrupt_enabled(&self) -> bool {
         self.vblank_interrupt_enabled
     }
 
-    pub fn hblank_interrupt_enabled(&self) -> bool {
+    pub const fn hblank_interrupt_enabled(&self) -> bool {
         self.hblank_interrupt_enabled
     }
 }

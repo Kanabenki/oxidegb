@@ -35,7 +35,7 @@ impl Mbc1 {
     const WRITE_MODE_START: u16 = 0x6000;
     const WRITE_MODE_END: u16 = 0x7FFF;
 
-    pub fn new(rom_bank_count: u16, has_ram: bool, has_battery: bool) -> Self {
+    pub const fn new(rom_bank_count: u16, has_ram: bool, has_battery: bool) -> Self {
         Self {
             has_ram,
             _has_battery: has_battery,
@@ -47,7 +47,7 @@ impl Mbc1 {
         }
     }
 
-    fn rom_address_low(&self, address: u16) -> usize {
+    const fn rom_address_low(&self, address: u16) -> usize {
         match self.bank_mode {
             BankMode::RomHighBits => {
                 address as usize + ((self.mode_register << 5) as usize * Self::ROM_BANK_SIZE)
@@ -56,7 +56,7 @@ impl Mbc1 {
         }
     }
 
-    fn rom_address_high(&self, address: u16) -> usize {
+    const fn rom_address_high(&self, address: u16) -> usize {
         match self.bank_mode {
             BankMode::RomHighBits => {
                 address as usize - Self::ROM_BANK_SIZE
@@ -70,7 +70,7 @@ impl Mbc1 {
         }
     }
 
-    fn ram_address(&self, address: u16) -> usize {
+    const fn ram_address(&self, address: u16) -> usize {
         match self.bank_mode {
             BankMode::RomHighBits => address as usize,
             BankMode::Ram => {

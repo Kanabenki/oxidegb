@@ -49,11 +49,11 @@ impl TryFrom<u8> for Color {
 pub struct Palette(Color, Color, Color, Color);
 
 impl Palette {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(Color::White, Color::White, Color::White, Color::White)
     }
 
-    pub fn value(&self) -> u8 {
+    pub const fn value(&self) -> u8 {
         self.0 as u8 | (self.1 as u8) << 2 | (self.2 as u8) << 4 | (self.3 as u8) << 6
     }
 

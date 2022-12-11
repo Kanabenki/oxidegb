@@ -131,11 +131,11 @@ impl Mmu {
         self.interrupt_flags & self.interrupt_enable
     }
 
-    pub fn interrupt_enable(&self) -> FlagSet<Interrupt> {
+    pub const fn interrupt_enable(&self) -> FlagSet<Interrupt> {
         self.interrupt_enable
     }
 
-    pub fn interrupt_flags(&self) -> FlagSet<Interrupt> {
+    pub const fn interrupt_flags(&self) -> FlagSet<Interrupt> {
         self.interrupt_flags
     }
 

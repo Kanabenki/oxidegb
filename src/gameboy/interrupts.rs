@@ -17,7 +17,7 @@ impl Interrupt {
     const SERIAL_ADDRESS: u16 = 0x58;
     const JOYPAD_ADDRESS: u16 = 0x60;
 
-    pub fn address(&self) -> u16 {
+    pub const fn address(&self) -> u16 {
         match self {
             Interrupt::VBlank => Self::VBLANK_ADDRESS,
             Interrupt::LcdStat => Self::LCD_STAT_ADDRESS,

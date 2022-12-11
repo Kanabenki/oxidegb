@@ -22,7 +22,7 @@ impl Fetcher {
     const TILE_MAP_WIDTH: u16 = 32;
     const SPRITE_HEIGHT: u16 = 8;
 
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             action: FetcherAction::ReadTile,
             waiting_cycle: false,
@@ -101,7 +101,7 @@ impl PixelFifo {
     const SIZE: usize = 16;
     const HALF_SIZE: usize = Self::SIZE / 2;
 
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             fifo: [palette::Color::White; Self::SIZE],
             start: 0,

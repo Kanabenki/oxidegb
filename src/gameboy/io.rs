@@ -14,7 +14,7 @@ pub enum Button {
 }
 
 impl Button {
-    fn bit(&self) -> u8 {
+    const fn bit(&self) -> u8 {
         match self {
             Button::Down | Button::Start => 0b0001,
             Button::Up | Button::Select => 0b0010,
@@ -23,7 +23,7 @@ impl Button {
         }
     }
 
-    fn line(&self) -> InputLine {
+    const fn line(&self) -> InputLine {
         match self {
             Button::Down | Button::Up | Button::Left | Button::Right => InputLine::Directions,
             Button::Start | Button::Select | Button::A | Button::B => InputLine::Buttons,
@@ -47,7 +47,7 @@ pub struct Buttons {
 }
 
 impl Buttons {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             directions: 0x0F,
             buttons: 0x0F,
@@ -56,7 +56,7 @@ impl Buttons {
         }
     }
 
-    fn read(&self) -> u8 {
+    const fn read(&self) -> u8 {
         match self.current_line {
             InputLine::Directions => (self.directions & 0xF) & 0xE0,
             InputLine::Buttons => (self.buttons & 0xF) & 0xD0,
@@ -98,14 +98,14 @@ impl Buttons {
 
 #[derive(Debug, Copy, Clone)]
 enum InputClock {
-    CpuDiv1024 = 0,
-    CpuDiv16 = 1,
-    CpuDiv64 = 2,
-    CpuDiv256 = 3,
+    CpuDiv1024 = 0b00,
+    CpuDiv16 = 0b01,
+    CpuDiv64 = 0b10,
+    CpuDiv256 = 0b11,
 }
 
 impl InputClock {
-    fn bit(&self) -> u16 {
+    const fn bit(&self) -> u16 {
         match self {
             InputClock::CpuDiv1024 => 1 << 10,
             InputClock::CpuDiv16 => 1 << 4,
@@ -137,7 +137,7 @@ impl Timer {
     const MODULO_ADDRESS: u16 = 0xFF06;
     const CONTROL_ADDRESS: u16 = 0xFF07;
 
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             divider: 0,
             counter: 0,
@@ -241,7 +241,7 @@ pub struct Io {
 }
 
 impl Io {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             buttons: Buttons::new(),
             timer: Timer::new(),

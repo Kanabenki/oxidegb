@@ -498,7 +498,7 @@ impl Cpu {
 
     fn rst(&mut self, opcode: u8) {
         self.push_stack(self.registers.pc);
-        self.registers.pc = (opcode  & 0b00111000) as u16;
+        self.registers.pc = (opcode & 0b00111000) as u16;
     }
 
     // Flags operations.

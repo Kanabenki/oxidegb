@@ -43,11 +43,11 @@ impl Gameboy {
         }
     }
 
-    pub fn screen(&self) -> &[ppu::Color; 160 * 144] {
+    pub const fn screen(&self) -> &[ppu::Color; 160 * 144] {
         self.cpu.mmu.ppu.screen()
     }
 
-    pub fn rom_header(&self) -> &cartridge::Header {
+    pub const fn rom_header(&self) -> &cartridge::Header {
         self.cpu.mmu.cartridge.header()
     }
 
