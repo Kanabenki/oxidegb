@@ -7,6 +7,8 @@ mod ppu;
 
 use std::io::Write;
 
+use clap::Parser;
+
 use crate::{error::Error, gameboy::mmu::MemoryOps};
 use cpu::Cpu;
 
@@ -82,48 +84,39 @@ impl Gameboy {
             print!("> ");
             let _ = std::io::stdout().flush();
             std::io::stdin().read_line(&mut buf).unwrap();
-            let mut words = buf.as_str().split_whitespace();
-            match (words.next(), words.next()) {
-                (Some("b" | "breakpoint"), Some(address)) => {
-                    let (address, radix) = if let Some(s_address) = address.strip_prefix("0x") {
-                        (s_address, 16)
-                    } else {
-                        (address, 10)
-                    };
-                    let Ok(address) = u16::from_str_radix(address, radix) else {
-                                println!("Invalid address \"{address}\"");
-                                continue;
-                            };
+            let Some(line) = buf.lines().next() else {
+                continue;
+            };
+            let arg = match DebugArgs::try_parse_from(line.split_whitespace()) {
+                Ok(arg) => arg,
+                Err(err) => {
+                    println!("{err}");
+                    continue;
+                }
+            };
+            match arg {
+                DebugArgs::Breakpoint { address } => {
                     if !self.debug_status.breakpoints.contains(&address) {
                         self.debug_status.breakpoints.push(address);
                     }
                 }
-                (Some("d" | "delete"), Some(address)) => {
-                    let (address, radix) = if let Some(s_address) = address.strip_prefix("0x") {
-                        (s_address, 16)
-                    } else {
-                        (address, 10)
-                    };
-                    let Ok(address) = u16::from_str_radix(address, radix) else {
-                                println!("Invalid address \"{address}\"");
-                                continue;
-                            };
+                DebugArgs::Delete { address } => {
                     self.debug_status.breakpoints.retain(|&a| a != address);
                 }
-                (Some("l" | "list"), _) => {
+                DebugArgs::List => {
                     println!(
                         "{}",
                         if self.debug_status.breakpoints.is_empty() {
-                            "Current breakpoints:"
-                        } else {
                             "No breakpoints"
+                        } else {
+                            "Current breakpoints:"
                         }
                     );
                     for breakpoint in &self.debug_status.breakpoints {
                         println!("0x{breakpoint:04X}");
                     }
                 }
-                (Some("r" | "registers"), _) => {
+                DebugArgs::Registers => {
                     // TODO Better debug print
                     println!(
                         "{:X?}\nIE: {:?}\nIF: {:?}",
@@ -132,14 +125,51 @@ impl Gameboy {
                         self.cpu.mmu.interrupt_flags()
                     );
                 }
-                (Some("s" | "step"), _) => {
+                DebugArgs::Step => {
                     self.cpu.next_instruction();
                 }
-                (Some("c" | "continue"), _) => break,
-                (None, None) => continue,
-                (Some(command), _) => println!("Unknown command \"{command}\""),
-                (None, Some(_)) => unreachable!(),
+                DebugArgs::Continue => break,
             };
         }
     }
+}
+
+fn parse_address(address: &str) -> Result<u16, &'static str> {
+    let (address, radix) = if let Some(s_address) = address.strip_prefix("0x") {
+        (s_address, 16)
+    } else {
+        (address, 10)
+    };
+    u16::from_str_radix(address, radix).map_err(|_| "Invalid address")
+}
+
+#[derive(Parser, Clone)]
+#[command(multicall = true)]
+enum DebugArgs {
+    /// Set a breakpoint to an address
+    #[command(visible_alias = "b", arg_required_else_help = true)]
+    Breakpoint {
+        /// The address to break on, either in decimal or in hexadecimal prefixed by "0x"
+        #[arg(value_parser=parse_address)]
+        address: u16,
+    },
+    /// Delete a breakpoint at an address
+    #[command(visible_alias = "d", arg_required_else_help = true)]
+    Delete {
+        /// The address for which the breakpoint must be deleted
+        #[arg(value_parser=parse_address)]
+        address: u16,
+    },
+    /// List all breakpoints
+    #[command(visible_alias = "l")]
+    List,
+    /// Display the current registers state
+    #[command(visible_alias = "r")]
+    Registers,
+    /// Step one instruction
+    #[command(visible_alias = "s")]
+    Step,
+    /// Resume execution
+    #[command(visible_alias = "c")]
+    Continue,
 }

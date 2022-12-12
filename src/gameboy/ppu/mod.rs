@@ -53,9 +53,8 @@ pub struct Ppu {
     screen: [Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize],
     vram: [u8; Self::VRAM_SIZE],
     oam: [u8; Self::OAM_SIZE],
-    bg_pixel_fifo: PixelFifo,
-    bg_fetcher: Fetcher,
-    _obj_pixel_fifo: PixelFifo,
+    pixel_fifo: PixelFifo,
+    fetcher: Fetcher,
     visible_sprites: Vec<sprite::Attributes>,
     dma: DmaRequest,
     dma_address: u8,
@@ -114,9 +113,8 @@ impl Ppu {
                 Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize],
             vram: [0; Self::VRAM_SIZE],
             oam: [0; Self::OAM_SIZE],
-            bg_pixel_fifo: PixelFifo::new(),
-            bg_fetcher: Fetcher::new(),
-            _obj_pixel_fifo: PixelFifo::new(),
+            pixel_fifo: PixelFifo::new(),
+            fetcher: Fetcher::new(),
             visible_sprites: Vec::with_capacity(10),
             dma: DmaRequest::None,
             dma_address: 0,
@@ -167,8 +165,8 @@ impl Ppu {
                     self.tick_pixel_transfer();
 
                     if self.x_pos == 160 {
-                        self.bg_pixel_fifo.clear();
-                        self.bg_fetcher.clear();
+                        self.pixel_fifo.clear();
+                        self.fetcher.clear();
                         self.visible_sprites.clear();
                         self.x_pos = 0;
 
@@ -232,8 +230,8 @@ impl Ppu {
     }
 
     fn tick_pixel_transfer(&mut self) {
-        self.bg_fetcher.tick(
-            &mut self.bg_pixel_fifo,
+        self.fetcher.tick(
+            &mut self.pixel_fifo,
             self.lcdc.bg_tile_map,
             self.lcdc.bg_window_addressing,
             self.bg_palette,
@@ -242,7 +240,7 @@ impl Ppu {
             &self.vram,
         );
 
-        if let Some(color) = self.bg_pixel_fifo.pop() {
+        if let Some(color) = self.pixel_fifo.pop() {
             if self.to_discard_x > 0 {
                 self.to_discard_x -= 1;
             } else {
