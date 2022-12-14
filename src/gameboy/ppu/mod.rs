@@ -166,6 +166,14 @@ impl Ppu {
                 }
             }
             Mode::PixelTransfer => {
+                if self.lcdc.window_enable
+                    && self.x_pos == self.window_x
+                    && self.line_y == self.window_y
+                {
+                    self.bg_fifo.clear();
+                    self.fetcher.clear();
+                }
+
                 for _ in 0..4 {
                     self.tick_pixel_transfer();
 
@@ -238,11 +246,13 @@ impl Ppu {
         self.fetcher.tick(
             &mut self.bg_fifo,
             &self.visible_sprites,
-            self.lcdc.bg_tile_map,
-            self.lcdc.bg_window_addressing,
+            &self.lcdc,
+            self.x_pos,
             self.line_y,
             self.scroll_y,
             &self.vram,
+            self.window_x,
+            self.window_y,
         );
 
         if let Some(pixel) = self.bg_fifo.pop() {
