@@ -1,8 +1,8 @@
 mod lcd_control;
 mod lcd_status;
+mod obj;
 mod palette;
 mod pixel_transfer;
-mod sprite;
 
 use std::convert::TryInto;
 
@@ -12,7 +12,7 @@ use self::{
     lcd_control::LcdControl,
     lcd_status::{LcdStatus, Mode},
     palette::Palette,
-    pixel_transfer::{BgPixel, Fetcher, ObjPixel, PixelFifo},
+    pixel_transfer::{mix_pixels, BgPixel, Fetcher, ObjPixel, PixelFifo},
 };
 use super::interrupts::Interrupt;
 
@@ -49,10 +49,10 @@ impl From<[u8; 4]> for Color {
 }
 
 #[derive(Debug, Default)]
-struct Palettes {
-    bg: Palette,
-    obj_0: Palette,
-    obj_1: Palette,
+pub(crate) struct Palettes {
+    pub(crate) bg: Palette,
+    pub(crate) obj_0: Palette,
+    pub(crate) obj_1: Palette,
 }
 
 #[derive(Debug)]
@@ -61,9 +61,9 @@ pub struct Ppu {
     vram: [u8; Self::VRAM_SIZE],
     oam: [u8; Self::OAM_SIZE],
     bg_fifo: PixelFifo<BgPixel>,
-    _obj_fifo: PixelFifo<ObjPixel>,
+    obj_fifo: PixelFifo<ObjPixel>,
     fetcher: Fetcher,
-    visible_sprites: Vec<sprite::Attributes>,
+    visible_sprites: Vec<obj::Attributes>,
     dma: DmaRequest,
     dma_address: u8,
     oam_index: usize,
@@ -120,7 +120,7 @@ impl Ppu {
             vram: [0; Self::VRAM_SIZE],
             oam: [0; Self::OAM_SIZE],
             bg_fifo: PixelFifo::new(),
-            _obj_fifo: PixelFifo::new(),
+            obj_fifo: PixelFifo::new(),
             fetcher: Fetcher::new(),
             visible_sprites: Vec::with_capacity(10),
             dma: DmaRequest::None,
@@ -157,7 +157,7 @@ impl Ppu {
 
                 if self.oam_index == Self::OAM_SIZE {
                     self.oam_index = 0;
-                    self.to_discard_x = self.scroll_x;
+                    self.to_discard_x = self.scroll_x & 0b111;
                     self.stat.mode = Mode::PixelTransfer;
 
                     if self.stat.oam_interrupt_enabled() {
@@ -225,7 +225,7 @@ impl Ppu {
     }
 
     fn tick_oam_search(&mut self) {
-        let sprite = sprite::Attributes::parse(
+        let sprite = obj::Attributes::parse(
             self.oam[self.oam_index..self.oam_index + 4]
                 .try_into()
                 .unwrap(),
@@ -249,21 +249,25 @@ impl Ppu {
             &self.lcdc,
             self.x_pos,
             self.line_y,
+            self.scroll_x,
             self.scroll_y,
             &self.vram,
             self.window_x,
             self.window_y,
         );
 
-        if let Some(pixel) = self.bg_fifo.pop() {
-            if self.to_discard_x > 0 {
-                self.to_discard_x -= 1;
-            } else {
-                self.screen
-                    [self.x_pos as usize + (self.line_y as usize * Self::LCD_SIZE_X as usize)] =
-                    self.palettes.bg[pixel.index].into();
-                self.x_pos += 1;
-            }
+        if self.bg_fifo.can_pop() && self.to_discard_x > 0 {
+            self.to_discard_x -= 1;
+            let _ = self.bg_fifo.pop();
+            return;
+        }
+
+        if self.bg_fifo.can_pop() && self.obj_fifo.can_pop() {
+            let (bg_pixel, obj_pixel) = (self.bg_fifo.pop().unwrap(), self.obj_fifo.pop().unwrap());
+            let color = mix_pixels(bg_pixel, obj_pixel, self.lcdc.obj_enable, &self.palettes);
+            self.screen[self.x_pos as usize + (self.line_y as usize * Self::LCD_SIZE_X as usize)] =
+                color.into();
+            self.x_pos += 1;
         }
     }
 

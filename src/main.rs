@@ -96,6 +96,7 @@ impl Emulator {
                     event: WindowEvent::CloseRequested,
                 } if window_id == self.window.id() => *control_flow = ControlFlow::Exit,
                 Event::MainEventsCleared => {
+                    // TODO proper sync
                     self.gameboy.run_frame(0);
                     self.window.request_redraw();
                 }

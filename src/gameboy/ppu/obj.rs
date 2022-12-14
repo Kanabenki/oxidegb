@@ -1,16 +1,16 @@
 #[derive(Debug, Clone, Copy)]
 pub enum Palette {
-    Obp0,
-    Obp1,
+    ObjP0,
+    ObjP1,
 }
 
 impl Default for Palette {
     fn default() -> Self {
-        Palette::Obp0
+        Palette::ObjP0
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Priority {
     BehindNonZeroBg,
     AboveBg,
@@ -49,9 +49,9 @@ impl Attributes {
         let flip_x = values[3] & (1 << 5) != 0;
 
         let palette = if values[3] & (1 << 4) == 0 {
-            Palette::Obp0
+            Palette::ObjP0
         } else {
-            Palette::Obp1
+            Palette::ObjP1
         };
 
         Self {

@@ -1,6 +1,7 @@
 use super::{
     lcd_control::LcdControl,
-    sprite::{self, Attributes},
+    obj::{self, Attributes, Priority},
+    palette, Palettes,
 };
 
 #[derive(Debug, Copy, Clone)]
@@ -55,6 +56,7 @@ impl Fetcher {
         lcdc: &LcdControl,
         x_pos: u8,
         line_y: u8,
+        _scroll_x: u8,
         scroll_y: u8,
         vram: &[u8],
         window_x: u8,
@@ -131,8 +133,27 @@ pub struct BgPixel {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ObjPixel {
     pub index: u8,
-    pub palette: sprite::Palette,
-    pub priority: sprite::Priority,
+    pub palette: obj::Palette,
+    pub priority: obj::Priority,
+}
+
+pub(crate) fn mix_pixels(
+    bg_pixel: BgPixel,
+    obj_pixel: ObjPixel,
+    obj_enable: bool,
+    palettes: &Palettes,
+) -> palette::Color {
+    if !obj_enable
+        || obj_pixel.index == 0
+        || (obj_pixel.priority == Priority::BehindNonZeroBg && bg_pixel.index > 0)
+    {
+        palettes.bg[bg_pixel.index]
+    } else {
+        match obj_pixel.palette {
+            obj::Palette::ObjP0 => palettes.obj_0[obj_pixel.index],
+            obj::Palette::ObjP1 => palettes.obj_0[obj_pixel.index],
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -167,6 +188,10 @@ impl<T: Copy + Default> PixelFifo<T> {
         } else {
             false
         }
+    }
+
+    pub fn can_pop(&self) -> bool {
+        self.size > Self::HALF_SIZE
     }
 
     pub fn pop(&mut self) -> Option<T> {
