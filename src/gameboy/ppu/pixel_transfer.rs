@@ -1,6 +1,6 @@
 use super::{
     lcd_control::{TileDataAddressing, TileMapRange},
-    palette::{self, Palette},
+    sprite::{self, Attributes},
 };
 
 #[derive(Debug, Copy, Clone)]
@@ -8,7 +8,7 @@ enum FetcherAction {
     ReadTile,
     ReadDataL { tile_index: u8 },
     ReadDataH { data_address: u16, data_l: u8 },
-    Wait { colors: [palette::Color; 8] },
+    Wait { indices: [u8; 8] },
 }
 
 #[derive(Debug)]
@@ -22,6 +22,15 @@ impl Fetcher {
     const TILE_MAP_WIDTH: u16 = 32;
     const SPRITE_HEIGHT: u16 = 8;
 
+    fn unpack_indices(data_l: u8, data_h: u8) -> [u8; 8] {
+        let mut indices = [0; 8];
+        for i in 0..8 {
+            indices[7 - i] = (((data_h >> i) << 1) & 0b10) | ((data_l >> i) & 0b01);
+        }
+
+        indices
+    }
+
     pub const fn new() -> Self {
         Self {
             action: FetcherAction::ReadTile,
@@ -34,12 +43,14 @@ impl Fetcher {
         *self = Self::new();
     }
 
+    // TODO simplify arguments
+    #[allow(clippy::too_many_arguments)]
     pub fn tick(
         &mut self,
-        fifo: &mut PixelFifo,
+        fifo: &mut PixelFifo<BgPixel>,
+        _visible_sprites: &[Attributes],
         tile_map: TileMapRange,
         addressing: TileDataAddressing,
-        palette: Palette,
         line_y: u8,
         scroll_y: u8,
         vram: &[u8],
@@ -74,15 +85,17 @@ impl Fetcher {
                 data_l,
             } => {
                 let data_h = vram[data_address as usize + 1];
-                let colors = palette::Color::from_packed(data_l, data_h, palette);
-                self.action = if fifo.push_line(&colors) {
+                let indices = Self::unpack_indices(data_l, data_h);
+                let pixels = indices.map(|index| BgPixel { index });
+                self.action = if fifo.push_line(&pixels) {
                     FetcherAction::ReadTile
                 } else {
-                    FetcherAction::Wait { colors }
+                    FetcherAction::Wait { indices }
                 };
             }
-            FetcherAction::Wait { ref colors } => {
-                if fifo.push_line(colors) {
+            FetcherAction::Wait { ref indices } => {
+                let pixels = indices.map(|index| BgPixel { index });
+                if fifo.push_line(&pixels) {
                     self.action = FetcherAction::ReadTile;
                 }
             }
@@ -90,28 +103,43 @@ impl Fetcher {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BgPixel {
+    pub index: u8,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ObjPixel {
+    pub index: u8,
+    pub palette: sprite::Palette,
+    pub priority: sprite::Priority,
+}
+
 #[derive(Debug)]
-pub struct PixelFifo {
-    fifo: [palette::Color; Self::SIZE],
+pub struct PixelFifo<T> {
+    fifo: [T; PixelFifo::<BgPixel>::SIZE],
     start: usize,
     size: usize,
 }
 
-impl PixelFifo {
+impl<T> PixelFifo<T> {
     const SIZE: usize = 16;
     const HALF_SIZE: usize = Self::SIZE / 2;
+}
 
-    pub const fn new() -> Self {
+impl<T: Copy + Default> PixelFifo<T> {
+    pub fn new() -> Self {
         Self {
-            fifo: [palette::Color::White; Self::SIZE],
+            // TODO Find a way to get SIZE without referencing a concrete type
+            fifo: [T::default(); PixelFifo::<BgPixel>::SIZE],
             start: 0,
             size: 0,
         }
     }
 
-    fn push_line(&mut self, colors: &[palette::Color; 8]) -> bool {
+    fn push_line(&mut self, pixels: &[T; 8]) -> bool {
         if self.size <= Self::HALF_SIZE {
-            for (i, color) in colors.iter().cloned().enumerate() {
+            for (i, color) in pixels.iter().cloned().enumerate() {
                 self.fifo[(self.start + self.size + i) % Self::SIZE] = color;
             }
             self.size += 8;
@@ -121,7 +149,7 @@ impl PixelFifo {
         }
     }
 
-    pub fn pop(&mut self) -> Option<palette::Color> {
+    pub fn pop(&mut self) -> Option<T> {
         if self.size > Self::HALF_SIZE {
             let color = Some(self.fifo[self.start]);
             self.start = (self.start + 1) % Self::SIZE;

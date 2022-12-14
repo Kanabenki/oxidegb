@@ -87,7 +87,7 @@ impl Gameboy {
             let Some(line) = buf.lines().next() else {
                 continue;
             };
-            let arg = match DebugArgs::try_parse_from(line.split_whitespace()) {
+            let arg = match DebugCommand::try_parse_from(line.split_whitespace()) {
                 Ok(arg) => arg,
                 Err(err) => {
                     println!("{err}");
@@ -95,15 +95,15 @@ impl Gameboy {
                 }
             };
             match arg {
-                DebugArgs::Breakpoint { address } => {
+                DebugCommand::Breakpoint { address } => {
                     if !self.debug_status.breakpoints.contains(&address) {
                         self.debug_status.breakpoints.push(address);
                     }
                 }
-                DebugArgs::Delete { address } => {
+                DebugCommand::Delete { address } => {
                     self.debug_status.breakpoints.retain(|&a| a != address);
                 }
-                DebugArgs::List => {
+                DebugCommand::List => {
                     println!(
                         "{}",
                         if self.debug_status.breakpoints.is_empty() {
@@ -116,7 +116,11 @@ impl Gameboy {
                         println!("0x{breakpoint:04X}");
                     }
                 }
-                DebugArgs::Registers => {
+                DebugCommand::Read { address } => {
+                    let value = self.cpu.mmu.read_byte(address);
+                    println!("(0x{address:04X}) = 0x{value:02X}");
+                }
+                DebugCommand::Registers => {
                     // TODO Better debug print
                     println!(
                         "{:X?}\nIE: {:?}\nIF: {:?}",
@@ -125,10 +129,10 @@ impl Gameboy {
                         self.cpu.mmu.interrupt_flags()
                     );
                 }
-                DebugArgs::Step => {
+                DebugCommand::Step => {
                     self.cpu.next_instruction();
                 }
-                DebugArgs::Continue => break,
+                DebugCommand::Continue => break,
             };
         }
     }
@@ -145,7 +149,7 @@ fn parse_address(address: &str) -> Result<u16, &'static str> {
 
 #[derive(Parser, Clone)]
 #[command(multicall = true)]
-enum DebugArgs {
+enum DebugCommand {
     /// Set a breakpoint to an address
     #[command(visible_alias = "b", arg_required_else_help = true)]
     Breakpoint {
@@ -157,6 +161,11 @@ enum DebugArgs {
     #[command(visible_alias = "d", arg_required_else_help = true)]
     Delete {
         /// The address for which the breakpoint must be deleted
+        #[arg(value_parser=parse_address)]
+        address: u16,
+    },
+    Read {
+        /// The address to read from, either in decimal or in hexadecimal prefixed by "0x"
         #[arg(value_parser=parse_address)]
         address: u16,
     },

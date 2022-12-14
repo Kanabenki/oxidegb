@@ -1,13 +1,25 @@
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Palette {
     Obp0,
     Obp1,
 }
 
-#[derive(Debug)]
+impl Default for Palette {
+    fn default() -> Self {
+        Palette::Obp0
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum Priority {
+    BehindNonZeroBg,
     AboveBg,
-    BehindBg,
+}
+
+impl Default for Priority {
+    fn default() -> Self {
+        Priority::BehindNonZeroBg
+    }
 }
 
 #[derive(Debug)]
@@ -30,7 +42,7 @@ impl Attributes {
         let priority = if values[3] & (1 << 7) == 0 {
             Priority::AboveBg
         } else {
-            Priority::BehindBg
+            Priority::BehindNonZeroBg
         };
 
         let flip_y = values[3] & (1 << 6) != 0;

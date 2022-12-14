@@ -12,7 +12,7 @@ use self::{
     lcd_control::LcdControl,
     lcd_status::{LcdStatus, Mode},
     palette::Palette,
-    pixel_transfer::{Fetcher, PixelFifo},
+    pixel_transfer::{BgPixel, Fetcher, ObjPixel, PixelFifo},
 };
 use super::interrupts::Interrupt;
 
@@ -48,12 +48,20 @@ impl From<[u8; 4]> for Color {
     }
 }
 
+#[derive(Debug, Default)]
+struct Palettes {
+    bg: Palette,
+    obj_0: Palette,
+    obj_1: Palette,
+}
+
 #[derive(Debug)]
 pub struct Ppu {
     screen: [Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize],
     vram: [u8; Self::VRAM_SIZE],
     oam: [u8; Self::OAM_SIZE],
-    pixel_fifo: PixelFifo,
+    bg_fifo: PixelFifo<BgPixel>,
+    _obj_fifo: PixelFifo<ObjPixel>,
     fetcher: Fetcher,
     visible_sprites: Vec<sprite::Attributes>,
     dma: DmaRequest,
@@ -61,9 +69,7 @@ pub struct Ppu {
     oam_index: usize,
     lcdc: LcdControl,
     stat: LcdStatus,
-    bg_palette: Palette,
-    obj_palette_0: Palette,
-    obj_palette_1: Palette,
+    palettes: Palettes,
     scroll_y: u8,
     scroll_x: u8,
     to_discard_x: u8,
@@ -113,7 +119,8 @@ impl Ppu {
                 Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize],
             vram: [0; Self::VRAM_SIZE],
             oam: [0; Self::OAM_SIZE],
-            pixel_fifo: PixelFifo::new(),
+            bg_fifo: PixelFifo::new(),
+            _obj_fifo: PixelFifo::new(),
             fetcher: Fetcher::new(),
             visible_sprites: Vec::with_capacity(10),
             dma: DmaRequest::None,
@@ -121,9 +128,7 @@ impl Ppu {
             oam_index: 0,
             lcdc: LcdControl::new(),
             stat: LcdStatus::new(),
-            bg_palette: Palette::new(),
-            obj_palette_0: Palette::new(),
-            obj_palette_1: Palette::new(),
+            palettes: Palettes::default(),
             scroll_x: 0,
             to_discard_x: 0,
             scroll_y: 0,
@@ -165,7 +170,7 @@ impl Ppu {
                     self.tick_pixel_transfer();
 
                     if self.x_pos == 160 {
-                        self.pixel_fifo.clear();
+                        self.bg_fifo.clear();
                         self.fetcher.clear();
                         self.visible_sprites.clear();
                         self.x_pos = 0;
@@ -231,22 +236,22 @@ impl Ppu {
 
     fn tick_pixel_transfer(&mut self) {
         self.fetcher.tick(
-            &mut self.pixel_fifo,
+            &mut self.bg_fifo,
+            &self.visible_sprites,
             self.lcdc.bg_tile_map,
             self.lcdc.bg_window_addressing,
-            self.bg_palette,
             self.line_y,
             self.scroll_y,
             &self.vram,
         );
 
-        if let Some(color) = self.pixel_fifo.pop() {
+        if let Some(pixel) = self.bg_fifo.pop() {
             if self.to_discard_x > 0 {
                 self.to_discard_x -= 1;
             } else {
                 self.screen
                     [self.x_pos as usize + (self.line_y as usize * Self::LCD_SIZE_X as usize)] =
-                    color.into();
+                    self.palettes.bg[pixel.index].into();
                 self.x_pos += 1;
             }
         }
@@ -293,9 +298,9 @@ impl Ppu {
             Self::LINE_Y => self.line_y,
             Self::LINE_Y_COMPARE => self.line_y_compare,
             Self::OAM_DMA => self.dma_address,
-            Self::BG_PALETTE => self.bg_palette.value(),
-            Self::OBJ_PALETTE_0 => self.obj_palette_0.value(),
-            Self::OBJ_PALETTE_1 => self.obj_palette_1.value(),
+            Self::BG_PALETTE => self.palettes.bg.value(),
+            Self::OBJ_PALETTE_0 => self.palettes.obj_0.value(),
+            Self::OBJ_PALETTE_1 => self.palettes.obj_1.value(),
             Self::WINDOW_Y => self.window_y,
             Self::WINDOW_X => self.window_x,
             Self::UNUSED_START..=Self::UNUSED_END | Self::CGB_VRAM_BANK_SELECT => 0xFF,
@@ -321,9 +326,9 @@ impl Ppu {
                 self.dma = DmaRequest::Start(value);
                 self.dma_address = value;
             }
-            Self::BG_PALETTE => self.bg_palette.set_value(value),
-            Self::OBJ_PALETTE_0 => self.obj_palette_0.set_value(value),
-            Self::OBJ_PALETTE_1 => self.obj_palette_1.set_value(value),
+            Self::BG_PALETTE => self.palettes.bg.set_value(value),
+            Self::OBJ_PALETTE_0 => self.palettes.obj_0.set_value(value),
+            Self::OBJ_PALETTE_1 => self.palettes.obj_1.set_value(value),
             Self::WINDOW_Y => self.window_y = value,
             Self::WINDOW_X => self.window_x = value,
             Self::UNUSED_START..=Self::UNUSED_END | Self::CGB_VRAM_BANK_SELECT => {}
