@@ -1,10 +1,8 @@
 use std::{fs, path::PathBuf};
 
 use clap::Parser;
-use color_eyre::eyre::eyre;
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use winit::{
-    dpi::LogicalSize,
     event::{ElementState, Event, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
@@ -17,26 +15,14 @@ struct Emulator {
     window: Window,
     pixels: Pixels,
     gameboy: Gameboy,
-    _scale: u32,
 }
 
 impl Emulator {
-    fn new(
-        rom: Vec<u8>,
-        bootrom: Option<Vec<u8>>,
-        scale: u32,
-        debug: bool,
-    ) -> color_eyre::Result<Self> {
-        if !(1..=8).contains(&scale) {
-            return Err(eyre!("Scale must be between 1 and 8"));
-        }
-
+    fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>, debug: bool) -> color_eyre::Result<Self> {
         let event_loop = EventLoop::new();
 
         let window = WindowBuilder::new()
             .with_title("Oxidegb")
-            .with_inner_size(LogicalSize::new(160 * scale, 144 * scale))
-            .with_resizable(false)
             .build(&event_loop)?;
 
         let pixels = {
@@ -56,7 +42,6 @@ impl Emulator {
             window,
             pixels,
             gameboy,
-            _scale: scale,
         })
     }
 
@@ -102,6 +87,12 @@ impl Emulator {
                 }
                 Event::WindowEvent {
                     window_id,
+                    event: WindowEvent::Resized(size),
+                } if window_id == self.window.id() => {
+                    self.pixels.resize_surface(size.width, size.height)
+                }
+                Event::WindowEvent {
+                    window_id,
                     event: WindowEvent::CloseRequested,
                 } if window_id == self.window.id() => *control_flow = ControlFlow::Exit,
                 Event::MainEventsCleared => {
@@ -124,9 +115,6 @@ struct Arguments {
     /// The bootrom file to load
     #[arg(short, long)]
     bootrom_file: Option<PathBuf>,
-    /// The scale of the emulator window
-    #[arg(short, long, default_value = "4")]
-    scale: u32,
     /// Display rom header info
     #[arg(short, long)]
     info: bool,
@@ -143,8 +131,7 @@ fn main() -> color_eyre::Result<()> {
     let bootrom = arguments
         .bootrom_file
         .map_or(Ok(None), |bootrom_file| fs::read(bootrom_file).map(Some))?;
-    let scale = arguments.scale;
-    let emulator = Emulator::new(rom, bootrom, scale, arguments.debug)?;
+    let emulator = Emulator::new(rom, bootrom, arguments.debug)?;
     if arguments.info {
         println!("{:?}", emulator.gameboy.rom_header());
     }
