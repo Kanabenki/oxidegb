@@ -35,8 +35,8 @@ pub struct Attributes {
 
 impl Attributes {
     pub const fn parse(values: [u8; 4]) -> Self {
-        let x = values[0];
-        let y = values[1];
+        let y = values[0];
+        let x = values[1];
         let tile_index = values[2];
 
         let priority = if values[3] & (1 << 7) == 0 {

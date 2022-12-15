@@ -1,20 +1,59 @@
 use super::{
-    lcd_control::LcdControl,
+    lcd_control::{LcdControl, TileDataAddressing},
     obj::{self, Attributes, Priority},
     palette, Palettes,
 };
 
+// TODO: simplify this mess
 #[derive(Debug, Copy, Clone)]
-enum FetcherAction {
-    ReadTile,
-    ReadDataL { tile_index: u8 },
-    ReadDataH { data_address: u16, data_l: u8 },
-    Wait { indices: [u8; 8] },
+enum Action {
+    ObjReadAttr {
+        prev_index: Option<usize>,
+    },
+    ObjReadDataL {
+        attr_index: usize,
+    },
+    ObjReadDataH {
+        data_address: u16,
+        data_l: u8,
+        attr_index: usize,
+    },
+    // TODO Check if this state is ever triggered
+    ObjWait {
+        pixels: [ObjPixel; 8],
+        attr_index: usize,
+    },
+    BgReadStartTile,
+    BgReadStartDataL,
+    BgReadStartDataH,
+    BgReadTile,
+    BgReadDataL {
+        tile_index: u8,
+    },
+    BgReadDataH {
+        data_address: u16,
+        data_l: u8,
+    },
+    BgWait {
+        pixels: [BgPixel; 8],
+    },
+}
+
+impl Action {
+    fn pending_obj(&self) -> bool {
+        matches!(
+            self,
+            Action::ObjReadAttr { .. }
+                | Action::ObjReadDataL { .. }
+                | Action::ObjReadDataH { .. }
+                | Action::ObjWait { .. }
+        )
+    }
 }
 
 #[derive(Debug)]
 pub struct Fetcher {
-    action: FetcherAction,
+    action: Action,
     waiting_cycle: bool,
     tile_map_index: u8,
 }
@@ -34,16 +73,25 @@ impl Fetcher {
 
     pub const fn new() -> Self {
         Self {
-            action: FetcherAction::ReadTile,
+            action: Action::BgReadStartTile,
             waiting_cycle: false,
             tile_map_index: 0,
         }
     }
 
-    pub fn clear(&mut self) {
+    pub fn start_line(&mut self) {
         *self = Self {
             waiting_cycle: self.waiting_cycle,
-            ..Self::new()
+            action: Action::BgReadStartTile,
+            tile_map_index: 0,
+        }
+    }
+
+    pub fn start_window(&mut self) {
+        *self = Self {
+            waiting_cycle: self.waiting_cycle,
+            action: Action::BgReadTile,
+            tile_map_index: 0,
         }
     }
 
@@ -51,21 +99,31 @@ impl Fetcher {
     #[allow(clippy::too_many_arguments)]
     pub fn tick(
         &mut self,
-        fifo: &mut PixelFifo<BgPixel>,
-        _visible_sprites: &[Attributes],
+        bg_fifo: &mut PixelFifo<BgPixel>,
+        obj_fifo: &mut PixelFifo<ObjPixel>,
+        visible_objs: &[Attributes],
         lcdc: &LcdControl,
         x_pos: u8,
         line_y: u8,
-        _scroll_x: u8,
+        scroll_x: u8,
         scroll_y: u8,
         vram: &[u8],
         window_x: u8,
         window_y: u8,
-    ) {
+    ) -> bool {
+        let check_for_obj = |last_checked: Option<usize>| {
+            let mut obj_range = if let Some(idx) = last_checked {
+                idx + 1..visible_objs.len()
+            } else {
+                0..visible_objs.len()
+            };
+            obj_range.find(|&i| visible_objs[i].x == x_pos)
+        };
+
         let waiting = self.waiting_cycle;
         self.waiting_cycle = !self.waiting_cycle;
         if waiting {
-            return;
+            return self.action.pending_obj();
         }
 
         let in_window = lcdc.window_enable && x_pos >= window_x && line_y >= window_y;
@@ -75,53 +133,139 @@ impl Fetcher {
             0
         };
 
-        let line = (line_y as u16 + scroll_y as u16 + window_y_offset)
+        let bg_w_line = (line_y as u16 + scroll_y as u16 + window_y_offset)
             % (Self::TILE_MAP_WIDTH * Self::SPRITE_HEIGHT);
 
         match self.action {
-            FetcherAction::ReadTile => {
-                let tile_map = if in_window {
-                    lcdc.window_tile_map
+            Action::ObjReadAttr { prev_index } => {
+                let attr_index = check_for_obj(prev_index).unwrap();
+                self.action = Action::ObjReadDataL { attr_index };
+            }
+            Action::ObjReadDataL { attr_index } => {
+                let obj = &visible_objs[attr_index];
+                let line = if obj.flip_y {
+                    7 - (line_y + 16 - obj.y) as u16
                 } else {
-                    lcdc.bg_tile_map
+                    (line_y + 16 - obj.y) as u16
                 };
-                self.action = FetcherAction::ReadDataL {
+                let data_address =
+                    TileDataAddressing::Unsigned.address_from_index(obj.tile_index, line);
+                let mut data_l = vram[data_address as usize];
+                if obj.flip_x {
+                    data_l = data_l.reverse_bits();
+                }
+                self.action = Action::ObjReadDataH {
+                    data_address,
+                    data_l,
+                    attr_index,
+                }
+            }
+            Action::ObjReadDataH {
+                data_address,
+                data_l,
+                attr_index,
+            } => {
+                let obj = &visible_objs[attr_index];
+                let mut data_h = vram[data_address as usize + 1];
+                if obj.flip_x {
+                    data_h = data_h.reverse_bits();
+                }
+                let indices = Self::unpack_indices(data_l, data_h);
+                let pixels = indices.map(|index| ObjPixel {
+                    index,
+                    palette: obj.palette,
+                    priority: obj.priority,
+                });
+                if obj_fifo.push_line(&pixels) {
+                    self.action = if check_for_obj(Some(attr_index)).is_some() {
+                        Action::ObjReadAttr {
+                            prev_index: Some(attr_index),
+                        }
+                    } else {
+                        Action::BgReadTile
+                    }
+                } else {
+                    self.action = Action::ObjWait { attr_index, pixels };
+                }
+            }
+            Action::ObjWait { attr_index, pixels } => {
+                if obj_fifo.push_line(&pixels) {
+                    self.action = if check_for_obj(Some(attr_index)).is_some() {
+                        Action::ObjReadAttr {
+                            prev_index: Some(attr_index),
+                        }
+                    } else {
+                        Action::BgReadTile
+                    };
+                }
+            }
+            Action::BgReadStartTile => self.action = Action::BgReadStartDataL,
+            Action::BgReadStartDataL => self.action = Action::BgReadStartDataH,
+            Action::BgReadStartDataH => {
+                let pixels = [BgPixel { index: 0 }; 8];
+                self.action = if bg_fifo.push_line(&pixels) {
+                    if check_for_obj(None).is_some() {
+                        Action::ObjReadAttr { prev_index: None }
+                    } else {
+                        Action::BgReadTile
+                    }
+                } else {
+                    Action::BgWait { pixels }
+                };
+            }
+            Action::BgReadTile => {
+                let (tile_map, scroll_offset) = if in_window {
+                    (lcdc.window_tile_map, 0)
+                } else {
+                    (lcdc.bg_tile_map, scroll_x / 8)
+                };
+                let tile_map_index =
+                    (self.tile_map_index as u16 + scroll_offset as u16) % Self::TILE_MAP_WIDTH;
+                self.action = Action::BgReadDataL {
                     tile_index: vram[(tile_map.base_address()
-                        + line / 8 * 32
-                        + (self.tile_map_index as u16))
-                        as usize],
+                        + bg_w_line / 8 * Self::TILE_MAP_WIDTH
+                        + tile_map_index) as usize],
                 };
                 self.tile_map_index = (self.tile_map_index + 1) % Self::TILE_MAP_WIDTH as u8;
             }
-            FetcherAction::ReadDataL { tile_index } => {
+            Action::BgReadDataL { tile_index } => {
                 let data_address = lcdc
                     .bg_window_addressing
-                    .address_from_index(tile_index, line);
-                self.action = FetcherAction::ReadDataH {
+                    .address_from_index(tile_index, bg_w_line);
+                self.action = Action::BgReadDataH {
                     data_address,
                     data_l: vram[data_address as usize],
                 };
             }
-            FetcherAction::ReadDataH {
+            Action::BgReadDataH {
                 data_address,
                 data_l,
             } => {
                 let data_h = vram[data_address as usize + 1];
                 let indices = Self::unpack_indices(data_l, data_h);
                 let pixels = indices.map(|index| BgPixel { index });
-                self.action = if fifo.push_line(&pixels) {
-                    FetcherAction::ReadTile
+                self.action = if bg_fifo.push_line(&pixels) {
+                    if check_for_obj(None).is_some() {
+                        Action::ObjReadAttr { prev_index: None }
+                    } else {
+                        Action::BgReadTile
+                    }
                 } else {
-                    FetcherAction::Wait { indices }
+                    Action::BgWait { pixels }
                 };
             }
-            FetcherAction::Wait { ref indices } => {
-                let pixels = indices.map(|index| BgPixel { index });
-                if fifo.push_line(&pixels) {
-                    self.action = FetcherAction::ReadTile;
+            Action::BgWait { ref pixels } => {
+                if bg_fifo.push_line(pixels) {
+                    self.action = if check_for_obj(None).is_some() {
+                        Action::ObjReadAttr { prev_index: None }
+                    } else {
+                        Action::BgReadTile
+                    }
                 }
             }
         }
+
+        self.action.pending_obj()
     }
 }
 
@@ -144,8 +288,8 @@ pub(crate) fn mix_pixels(
     palettes: &Palettes,
 ) -> palette::Color {
     if !obj_enable
-        || obj_pixel.index == 0
-        || (obj_pixel.priority == Priority::BehindNonZeroBg && bg_pixel.index > 0)
+        || bg_pixel.index != 0 && obj_pixel.index == 0
+        || obj_pixel.priority == Priority::BehindNonZeroBg && bg_pixel.index > 0
     {
         palettes.bg[bg_pixel.index]
     } else {
@@ -164,8 +308,43 @@ pub struct PixelFifo<T> {
 }
 
 impl<T> PixelFifo<T> {
-    const SIZE: usize = 16;
-    const HALF_SIZE: usize = Self::SIZE / 2;
+    const SIZE: usize = 8;
+}
+
+impl PixelFifo<ObjPixel> {
+    fn push_line(&mut self, pixels: &[ObjPixel; 8]) -> bool {
+        // Fill available Fifo space with transparent pixels
+        for i in self.size..Self::SIZE {
+            self.fifo[(self.start + i) % Self::SIZE] = ObjPixel {
+                index: 0,
+                palette: obj::Palette::ObjP0,
+                priority: Priority::BehindNonZeroBg,
+            };
+        }
+        self.size = Self::SIZE;
+
+        for (i, new_pixel) in pixels.iter().copied().enumerate() {
+            let pixel = &mut self.fifo[(self.start + i) % Self::SIZE];
+            if pixel.index == 0 && new_pixel.index > 0 {
+                *pixel = new_pixel;
+            }
+        }
+        true
+    }
+}
+
+impl PixelFifo<BgPixel> {
+    fn push_line(&mut self, pixels: &[BgPixel; 8]) -> bool {
+        if self.size == 0 {
+            for (i, pixel) in pixels.iter().copied().enumerate() {
+                self.fifo[(self.start + self.size + i) % Self::SIZE] = pixel;
+            }
+            self.size += 8;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl<T: Copy + Default> PixelFifo<T> {
@@ -178,24 +357,8 @@ impl<T: Copy + Default> PixelFifo<T> {
         }
     }
 
-    fn push_line(&mut self, pixels: &[T; 8]) -> bool {
-        if self.size <= Self::HALF_SIZE {
-            for (i, color) in pixels.iter().cloned().enumerate() {
-                self.fifo[(self.start + self.size + i) % Self::SIZE] = color;
-            }
-            self.size += 8;
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn can_pop(&self) -> bool {
-        self.size > Self::HALF_SIZE
-    }
-
     pub fn pop(&mut self) -> Option<T> {
-        if self.size > Self::HALF_SIZE {
+        if self.size > 0 {
             let color = Some(self.fifo[self.start]);
             self.start = (self.start + 1) % Self::SIZE;
             self.size -= 1;

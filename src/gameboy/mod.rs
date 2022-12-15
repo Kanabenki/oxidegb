@@ -25,7 +25,7 @@ pub struct Gameboy {
 }
 
 impl Gameboy {
-    const TICKS_PER_FRAME: u32 = 70_224;
+    pub const TICKS_PER_FRAME: u32 = 70_224;
 
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>, debug: bool) -> Result<Self, Error> {
         let cpu = Cpu::new(rom, bootrom)?;
@@ -36,13 +36,13 @@ impl Gameboy {
         Ok(Self { cpu, debug_status })
     }
 
-    pub fn run_frame(&mut self, _delta: u32) -> u32 {
+    pub fn run(&mut self, ticks: u32, delta: u32) -> u32 {
         loop {
             self.run_debugger();
             let cycles_elapsed = self.cpu.next_instruction();
-            if cycles_elapsed >= Self::TICKS_PER_FRAME {
+            if cycles_elapsed >= ticks - delta {
                 self.cpu.reset_cycles();
-                return cycles_elapsed - Self::TICKS_PER_FRAME;
+                return cycles_elapsed - (ticks - delta);
             }
         }
     }

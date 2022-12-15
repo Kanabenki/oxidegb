@@ -15,6 +15,7 @@ struct Emulator {
     window: Window,
     pixels: Pixels,
     gameboy: Gameboy,
+    delta: u32,
 }
 
 impl Emulator {
@@ -30,7 +31,7 @@ impl Emulator {
             let surface_texture =
                 SurfaceTexture::new(window_size.width, window_size.height, &window);
             PixelsBuilder::new(160, 144, surface_texture)
-                .enable_vsync(false)
+                .enable_vsync(true)
                 .build()?
         };
 
@@ -42,6 +43,7 @@ impl Emulator {
             window,
             pixels,
             gameboy,
+            delta: 0,
         })
     }
 
@@ -96,8 +98,15 @@ impl Emulator {
                     event: WindowEvent::CloseRequested,
                 } if window_id == self.window.id() => *control_flow = ControlFlow::Exit,
                 Event::MainEventsCleared => {
-                    // TODO proper sync
-                    self.gameboy.run_frame(0);
+                    let ticks = (59_727.5
+                        / self
+                            .window
+                            .current_monitor()
+                            .unwrap()
+                            .refresh_rate_millihertz()
+                            .unwrap() as f32
+                        * Gameboy::TICKS_PER_FRAME as f32) as u32;
+                    self.delta = self.gameboy.run(ticks, self.delta);
                     self.window.request_redraw();
                 }
                 _ => (),

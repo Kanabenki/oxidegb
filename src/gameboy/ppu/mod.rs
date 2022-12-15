@@ -171,15 +171,15 @@ impl Ppu {
                     && self.line_y == self.window_y
                 {
                     self.bg_fifo.clear();
-                    self.fetcher.clear();
+                    self.fetcher.start_window();
                 }
 
                 for _ in 0..4 {
                     self.tick_pixel_transfer();
 
-                    if self.x_pos == 160 {
+                    if self.x_pos == Self::LCD_SIZE_X + 8 {
                         self.bg_fifo.clear();
-                        self.fetcher.clear();
+                        self.fetcher.start_line();
                         self.visible_sprites.clear();
                         self.x_pos = 0;
 
@@ -243,8 +243,9 @@ impl Ppu {
     }
 
     fn tick_pixel_transfer(&mut self) {
-        self.fetcher.tick(
+        let pending = self.fetcher.tick(
             &mut self.bg_fifo,
+            &mut self.obj_fifo,
             &self.visible_sprites,
             &self.lcdc,
             self.x_pos,
@@ -256,18 +257,25 @@ impl Ppu {
             self.window_y,
         );
 
-        if self.bg_fifo.can_pop() && self.to_discard_x > 0 {
-            self.to_discard_x -= 1;
-            let _ = self.bg_fifo.pop();
+        if pending {
             return;
         }
 
-        if self.bg_fifo.can_pop() && self.obj_fifo.can_pop() {
-            let (bg_pixel, obj_pixel) = (self.bg_fifo.pop().unwrap(), self.obj_fifo.pop().unwrap());
-            let color = mix_pixels(bg_pixel, obj_pixel, self.lcdc.obj_enable, &self.palettes);
-            self.screen[self.x_pos as usize + (self.line_y as usize * Self::LCD_SIZE_X as usize)] =
-                color.into();
-            self.x_pos += 1;
+        if let Some(bg_pixel) = self.bg_fifo.pop() {
+            if self.to_discard_x > 0 {
+                self.to_discard_x -= 1;
+            } else {
+                let color = if let Some(obj_pixel) = self.obj_fifo.pop() {
+                    mix_pixels(bg_pixel, obj_pixel, self.lcdc.obj_enable, &self.palettes)
+                } else {
+                    self.palettes.bg[bg_pixel.index]
+                };
+                if self.x_pos >= 8 {
+                    self.screen[(self.x_pos - 8) as usize
+                        + (self.line_y as usize * Self::LCD_SIZE_X as usize)] = color.into();
+                }
+                self.x_pos += 1;
+            }
         }
     }
 
