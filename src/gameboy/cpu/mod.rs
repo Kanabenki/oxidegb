@@ -114,7 +114,7 @@ impl Cpu {
         u16::from_be_bytes([upper, lower])
     }
 
-    fn set_pc(&mut self, address: u16) {
+    fn set_pc_tick(&mut self, address: u16) {
         self.tick();
         self.registers.pc = address;
     }
@@ -136,7 +136,6 @@ impl Cpu {
     }
 
     fn test_cc(&mut self, opcode: u8) -> bool {
-        self.tick();
         match (opcode >> 3) & 0b11 {
             0 => !self.registers.flags.zero(),
             1 => self.registers.flags.zero(),

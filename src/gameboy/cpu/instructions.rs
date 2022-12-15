@@ -130,10 +130,12 @@ impl Cpu {
             false,
             FlagOp::Carry,
         );
+        self.tick();
         self.registers.set_hl((Wr(sp_value) + Wr(u8_value)).0);
     }
 
     fn ld_sp_hl(&mut self, _opcode: u8) {
+        self.tick();
         self.registers.sp = self.registers.hl();
     }
 
@@ -193,6 +195,7 @@ impl Cpu {
     fn dec_rr(&mut self, opcode: u8) {
         let index = DoubleRegisterIndex::from_opcode(opcode);
         let value = Wr(self.registers.rr(index)) - Wr(1);
+        self.tick();
         self.registers.set_rr(index, value.0);
     }
 
@@ -304,6 +307,8 @@ impl Cpu {
             false,
             FlagOp::Carry,
         );
+        self.tick();
+        self.tick();
         self.registers.sp = (Wr(sp_value) + Wr(i8_value)).0;
     }
 
@@ -444,7 +449,7 @@ impl Cpu {
 
     fn jp_u16(&mut self, _opcode: u8) {
         let address = self.fetch_dbyte_pc();
-        self.set_pc(address);
+        self.set_pc_tick(address);
     }
 
     fn jp_mhl(&mut self, _opcode: u8) {
@@ -454,41 +459,43 @@ impl Cpu {
     fn jp_cc_u16(&mut self, opcode: u8) {
         let address = self.fetch_dbyte_pc();
         if self.test_cc(opcode) {
-            self.registers.pc = address;
+            self.set_pc_tick(address);
         }
     }
 
     fn jr_i8(&mut self, _opcode: u8) {
         let offset = self.fetch_byte_pc() as i8 as u16;
         let address = self.registers.pc.wrapping_add(offset);
-        self.set_pc(address);
+        self.set_pc_tick(address);
     }
 
     fn jr_cc(&mut self, opcode: u8) {
         let offset = self.fetch_byte_pc() as i8 as u16;
         if self.test_cc(opcode) {
-            self.registers.pc = self.registers.pc.wrapping_add(offset);
+            let address = self.registers.pc.wrapping_add(offset);
+            self.set_pc_tick(address);
         }
     }
 
     fn call_u16(&mut self, _opcode: u8) {
         let address = self.fetch_dbyte_pc();
         let pc = self.registers.pc;
-        self.set_pc(address);
+        self.set_pc_tick(address);
         self.push_stack(pc);
     }
 
     fn call_cc_u16(&mut self, opcode: u8) {
         let address = self.fetch_dbyte_pc();
         if self.test_cc(opcode) {
-            self.push_stack(self.registers.pc);
-            self.registers.pc = address;
+            let pc = self.registers.pc;
+            self.set_pc_tick(address);
+            self.push_stack(pc);
         }
     }
 
     fn ret(&mut self, _opcode: u8) {
         let address = self.pop_stack();
-        self.set_pc(address);
+        self.set_pc_tick(address);
     }
 
     fn reti(&mut self, opcode: u8) {
@@ -497,6 +504,7 @@ impl Cpu {
     }
 
     fn ret_cc(&mut self, opcode: u8) {
+        self.tick();
         if self.test_cc(opcode) {
             self.ret(opcode);
         }
@@ -504,7 +512,7 @@ impl Cpu {
 
     fn rst(&mut self, opcode: u8) {
         self.push_stack(self.registers.pc);
-        self.registers.pc = (opcode & 0b00111000) as u16;
+        self.set_pc_tick((opcode & 0b00111000) as u16);
     }
 
     // Flags operations.
@@ -532,6 +540,7 @@ impl Cpu {
     }
 
     fn push_af(&mut self, _opcode: u8) {
+        self.tick();
         self.push_stack(self.registers.af());
     }
 
