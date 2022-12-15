@@ -16,10 +16,10 @@ pub enum Button {
 impl Button {
     const fn bit(&self) -> u8 {
         match self {
-            Button::Down | Button::Start => 0b0001,
-            Button::Up | Button::Select => 0b0010,
-            Button::Left | Button::A => 0b0100,
-            Button::Right | Button::B => 0b1000,
+            Button::Right | Button::A => 0b0001,
+            Button::Left | Button::B => 0b0010,
+            Button::Up | Button::Select => 0b0100,
+            Button::Down | Button::Start => 0b1000,
         }
     }
 
