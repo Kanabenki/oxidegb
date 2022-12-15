@@ -15,8 +15,8 @@ impl TileMapRange {
 
 #[derive(Debug, Copy, Clone)]
 pub enum TileDataAddressing {
-    Unsigned = 0,
-    Signed = 1,
+    Signed = 0,
+    Unsigned = 1,
 }
 
 impl TileDataAddressing {
@@ -78,6 +78,7 @@ impl LcdControl {
             | (self.bg_window_addressing as u8) << 4
             | (self.bg_tile_map as u8) << 3
             | (self.obj_size as u8) << 2
+            | (self.obj_enable as u8) << 1
             | (self.bg_window_enable as u8)
     }
 
