@@ -114,6 +114,11 @@ impl Cpu {
         u16::from_be_bytes([upper, lower])
     }
 
+    fn set_pc(&mut self, address: u16) {
+        self.tick();
+        self.registers.pc = address;
+    }
+
     fn r(&mut self, index: RegisterIndex) -> u8 {
         if index.value() == 6 {
             self.read_byte(self.registers.hl())
@@ -130,7 +135,8 @@ impl Cpu {
         }
     }
 
-    fn test_cc(&self, opcode: u8) -> bool {
+    fn test_cc(&mut self, opcode: u8) -> bool {
+        self.tick();
         match (opcode >> 3) & 0b11 {
             0 => !self.registers.flags.zero(),
             1 => self.registers.flags.zero(),

@@ -186,6 +186,7 @@ impl Cpu {
     fn inc_rr(&mut self, opcode: u8) {
         let index = DoubleRegisterIndex::from_opcode(opcode);
         let value = Wr(self.registers.rr(index)) + Wr(1);
+        self.tick();
         self.registers.set_rr(index, value.0);
     }
 
@@ -286,6 +287,7 @@ impl Cpu {
         self.registers
             .flags
             .update_carry_u16(hl_value, reg_value, FlagOp::Carry);
+        self.tick();
         self.registers.set_hl((Wr(hl_value) + Wr(reg_value)).0);
     }
 
@@ -441,7 +443,8 @@ impl Cpu {
     // Control flow operations.
 
     fn jp_u16(&mut self, _opcode: u8) {
-        self.registers.pc = self.fetch_dbyte_pc();
+        let address = self.fetch_dbyte_pc();
+        self.set_pc(address);
     }
 
     fn jp_mhl(&mut self, _opcode: u8) {
@@ -457,7 +460,8 @@ impl Cpu {
 
     fn jr_i8(&mut self, _opcode: u8) {
         let offset = self.fetch_byte_pc() as i8 as u16;
-        self.registers.pc = self.registers.pc.wrapping_add(offset);
+        let address = self.registers.pc.wrapping_add(offset);
+        self.set_pc(address);
     }
 
     fn jr_cc(&mut self, opcode: u8) {
@@ -469,8 +473,9 @@ impl Cpu {
 
     fn call_u16(&mut self, _opcode: u8) {
         let address = self.fetch_dbyte_pc();
-        self.push_stack(self.registers.pc);
-        self.registers.pc = address;
+        let pc = self.registers.pc;
+        self.set_pc(address);
+        self.push_stack(pc);
     }
 
     fn call_cc_u16(&mut self, opcode: u8) {
@@ -482,7 +487,8 @@ impl Cpu {
     }
 
     fn ret(&mut self, _opcode: u8) {
-        self.registers.pc = self.pop_stack();
+        let address = self.pop_stack();
+        self.set_pc(address);
     }
 
     fn reti(&mut self, opcode: u8) {
@@ -521,6 +527,7 @@ impl Cpu {
 
     fn push_rr(&mut self, opcode: u8) {
         let index = DoubleRegisterIndex::from_opcode(opcode);
+        self.tick();
         self.push_stack(self.registers.rr(index));
     }
 
