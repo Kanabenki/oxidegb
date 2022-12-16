@@ -1,5 +1,5 @@
 use super::{
-    lcd_control::{LcdControl, TileDataAddressing},
+    lcd_control::{LcdControl, SpriteSize, TileDataAddressing},
     obj::{self, Attributes, Priority},
     palette, Palettes,
 };
@@ -140,12 +140,16 @@ impl Fetcher {
             Action::ObjReadDataL { attr_index } => {
                 let obj = &visible_objs[attr_index];
                 let line = if obj.flip_y {
-                    7 - (line_y + 16 - obj.y) as u16
+                    lcdc.obj_size.height() as u16 - 1 - (line_y + 16 - obj.y) as u16
                 } else {
                     (line_y + 16 - obj.y) as u16
                 };
+                let index = match lcdc.obj_size {
+                    SpriteSize::S8x8 => obj.tile_index,
+                    SpriteSize::S8x16 => obj.tile_index & !0b1,
+                };
                 let data_address =
-                    TileDataAddressing::Unsigned.address_from_index(obj.tile_index, line);
+                    TileDataAddressing::Unsigned.address_from_index_obj(index, line, lcdc.obj_size);
                 let mut data_l = vram[data_address as usize];
                 if obj.flip_x {
                     data_l = data_l.reverse_bits();
@@ -227,7 +231,7 @@ impl Fetcher {
             Action::BgReadDataL { tile_index } => {
                 let data_address = lcdc
                     .bg_window_addressing
-                    .address_from_index(tile_index, bg_w_line);
+                    .address_from_index_bg(tile_index, bg_w_line);
                 self.action = Action::BgReadDataH {
                     data_address,
                     data_l: vram[data_address as usize],

@@ -20,11 +20,21 @@ pub enum TileDataAddressing {
 }
 
 impl TileDataAddressing {
-    pub const fn address_from_index(&self, index: u8, line: u16) -> u16 {
+    pub const fn address_from_index_bg(&self, index: u8, line: u16) -> u16 {
         match self {
             TileDataAddressing::Unsigned => (index as u16 * 16) + (line % 8) * 2,
             TileDataAddressing::Signed => {
                 0x1000u16.wrapping_add((index as i8 as i16 * 16) as u16) + (line % 8) * 2
+            }
+        }
+    }
+
+    pub const fn address_from_index_obj(&self, index: u8, line: u16, size: SpriteSize) -> u16 {
+        match self {
+            TileDataAddressing::Unsigned => (index as u16 * 16) + (line % size.height() as u16) * 2,
+            TileDataAddressing::Signed => {
+                0x1000u16.wrapping_add((index as i8 as i16 * 16) as u16)
+                    + (line % size.height() as u16) * 2
             }
         }
     }
