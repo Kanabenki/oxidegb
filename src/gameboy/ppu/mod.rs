@@ -63,7 +63,7 @@ pub struct Ppu {
     bg_fifo: PixelFifo<BgPixel>,
     obj_fifo: PixelFifo<ObjPixel>,
     fetcher: Fetcher,
-    visible_sprites: Vec<obj::Attributes>,
+    visible_objs: Vec<obj::Attributes>,
     dma: DmaRequest,
     dma_address: u8,
     oam_index: usize,
@@ -122,7 +122,7 @@ impl Ppu {
             bg_fifo: PixelFifo::new(),
             obj_fifo: PixelFifo::new(),
             fetcher: Fetcher::new(),
-            visible_sprites: Vec::with_capacity(10),
+            visible_objs: Vec::with_capacity(10),
             dma: DmaRequest::None,
             dma_address: 0,
             oam_index: 0,
@@ -180,7 +180,7 @@ impl Ppu {
                     if self.x_pos == Self::LCD_SIZE_X + 8 {
                         self.bg_fifo.clear();
                         self.fetcher.start_line();
-                        self.visible_sprites.clear();
+                        self.visible_objs.clear();
                         self.x_pos = 0;
 
                         self.stat.mode = Mode::HBlank;
@@ -225,18 +225,18 @@ impl Ppu {
     }
 
     fn tick_oam_search(&mut self) {
-        let sprite = obj::Attributes::parse(
+        let obj = obj::Attributes::parse(
             self.oam[self.oam_index..self.oam_index + 4]
                 .try_into()
                 .unwrap(),
         );
 
-        if self.visible_sprites.len() < Self::MAX_VISIBLE_SPRITES
-            && sprite.x != 0
-            && sprite.y <= self.line_y + 16
-            && self.line_y + 16 < sprite.y + self.lcdc.obj_size.height()
+        if self.visible_objs.len() < Self::MAX_VISIBLE_SPRITES
+            && obj.x != 0
+            && obj.y <= self.line_y + 16
+            && self.line_y + 16 < obj.y + self.lcdc.obj_size.height()
         {
-            self.visible_sprites.push(sprite);
+            self.visible_objs.push(obj);
         }
 
         self.oam_index += 4;
@@ -246,7 +246,7 @@ impl Ppu {
         let pending = self.fetcher.tick(
             &mut self.bg_fifo,
             &mut self.obj_fifo,
-            &self.visible_sprites,
+            &self.visible_objs,
             &self.lcdc,
             self.x_pos,
             self.line_y,
@@ -265,11 +265,7 @@ impl Ppu {
             if self.to_discard_x > 0 {
                 self.to_discard_x -= 1;
             } else {
-                let color = if let Some(obj_pixel) = self.obj_fifo.pop() {
-                    mix_pixels(bg_pixel, obj_pixel, self.lcdc.obj_enable, &self.palettes)
-                } else {
-                    self.palettes.bg[bg_pixel.index]
-                };
+                let color = mix_pixels(bg_pixel, self.obj_fifo.pop(), &self.lcdc, &self.palettes);
                 if self.x_pos >= 8 {
                     self.screen[(self.x_pos - 8) as usize
                         + (self.line_y as usize * Self::LCD_SIZE_X as usize)] = color.into();

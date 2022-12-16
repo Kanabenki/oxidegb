@@ -131,6 +131,21 @@ impl Mmu {
         self.interrupt_flags & self.interrupt_enable
     }
 
+    pub fn next_interrupt(&self) -> Option<Interrupt> {
+        // Needed has the flagset iteration order is undefined
+        let interrupts = self.interrupts();
+        [
+            Interrupt::VBlank,
+            Interrupt::LcdStat,
+            Interrupt::Timer,
+            Interrupt::Serial,
+            Interrupt::Joypad,
+        ]
+        .iter()
+        .copied()
+        .find(|&f| interrupts.contains(f))
+    }
+
     pub const fn interrupt_enable(&self) -> FlagSet<Interrupt> {
         self.interrupt_enable
     }

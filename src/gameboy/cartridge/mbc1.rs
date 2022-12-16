@@ -122,7 +122,7 @@ impl Mapper for Mbc1 {
     }
 
     fn write_ram(&mut self, ram: &mut [u8], address: u16, value: u8) {
-        if self.has_ram && self.ram_enabled && address as usize <= ram.len() {
+        if self.has_ram && self.ram_enabled && (address as usize) < ram.len() {
             ram[self.ram_address(address)] = value;
         }
     }

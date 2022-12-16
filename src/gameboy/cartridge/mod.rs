@@ -25,7 +25,7 @@ pub struct Header {
 impl Header {
     fn parse(rom_bytes: &[u8]) -> Result<(Self, MapperKind), Error> {
         if rom_bytes.len() < 0x014F {
-            return Err(Error::InvalidRomHeader("Header is too short".into()));
+            return Err(Error::InvalidRomHeader("Header is too short"));
         }
 
         let title = String::from_utf8(
@@ -35,35 +35,36 @@ impl Header {
                 .unwrap()
                 .to_owned(),
         )
-        .map_err(|_| Error::InvalidRomHeader("Could not parse title".into()))?;
+        .map_err(|_| Error::InvalidRomHeader("Could not parse title"))?;
 
         let rom_bank_count = match rom_bytes[0x148] {
             rom_bank_byte @ 0x00..=0x08 => 2 << rom_bank_byte,
-            _ => return Err(Error::InvalidRomHeader("Invalid rom bank count".into())),
+            _ => return Err(Error::InvalidRomHeader("Invalid rom bank count")),
         };
 
         let rom_size = 0x4000 * rom_bank_count;
 
         let (ram_bank_count, ram_size) = match rom_bytes[0x149] {
             0x00 => (0, 0),
-            0x01 => (1, 0x2000),
             0x02 => (1, 0x0800),
             0x03 => (4, 0x2000 * 4),
             0x04 => (16, 0x2000 * 16),
             0x05 => (8, 0x2000 * 8),
-            _ => return Err(Error::InvalidRomHeader("Invalid ram bank count".into())),
+            _ => return Err(Error::InvalidRomHeader("Invalid ram bank count")),
         };
 
         let mapper = match rom_bytes[0x147] {
             0x00 => MapperKind::RomOnly(RomOnly),
             0x01 => MapperKind::Mbc1(Mbc1::new(rom_bank_count as u16, false, false)),
-            _ => return Err(Error::UnsupportedMapper),
+            0x02 => MapperKind::Mbc1(Mbc1::new(rom_bank_count as u16, true, false)),
+            0x03 => MapperKind::Mbc1(Mbc1::new(rom_bank_count as u16, true, true)),
+            id => return Err(Error::UnsupportedMapper(id)),
         };
 
         let destination = match rom_bytes[0x14A] {
             0x00 => Destination::Japanese,
             0x01 => Destination::NonJapanese,
-            _ => return Err(Error::InvalidRomHeader("Invalid destination".into())),
+            _ => return Err(Error::InvalidRomHeader("Invalid destination")),
         };
 
         Ok((
@@ -160,6 +161,6 @@ impl Cartridge {
     }
 
     pub fn write_ram(&mut self, address: u16, value: u8) {
-        self.mapper.write_ram(&mut self.ram, address, value)
+        self.mapper.write_ram(&mut self.ram, address, value);
     }
 }

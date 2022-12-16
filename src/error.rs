@@ -3,8 +3,8 @@ use std::{error::Error as StdError, fmt::Display};
 #[derive(Debug)]
 pub enum Error {
     InvalidBootRom,
-    InvalidRomHeader(String),
-    UnsupportedMapper,
+    InvalidRomHeader(&'static str),
+    UnsupportedMapper(u8),
 }
 
 impl Display for Error {
@@ -14,7 +14,7 @@ impl Display for Error {
             Error::InvalidRomHeader(reason) => {
                 write!(f, "Rom header cannot be parsed ({})", reason)
             }
-            Error::UnsupportedMapper => write!(f, "Unsupported rom mapper"),
+            Error::UnsupportedMapper(id) => write!(f, "Unsupported rom mapper id {id}"),
         }
     }
 }

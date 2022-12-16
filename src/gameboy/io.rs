@@ -197,7 +197,7 @@ impl Timer {
         match address {
             Self::DIVIDER_ADDRESS => {
                 if self.divider & self.input_clock.bit() != 0 {
-                    self.increase_counter()
+                    self.increase_counter();
                 }
                 self.divider = 0;
             }

@@ -283,20 +283,26 @@ pub struct ObjPixel {
 
 pub(crate) fn mix_pixels(
     bg_pixel: BgPixel,
-    obj_pixel: ObjPixel,
-    obj_enable: bool,
+    obj_pixel: Option<ObjPixel>,
+    lcdc: &LcdControl,
     palettes: &Palettes,
 ) -> palette::Color {
-    if !obj_enable
-        || bg_pixel.index != 0 && obj_pixel.index == 0
-        || obj_pixel.priority == Priority::BehindNonZeroBg && bg_pixel.index > 0
-    {
+    if let Some(obj_pixel) = obj_pixel {
+        if lcdc.obj_enable
+            && obj_pixel.index != 0
+            && (obj_pixel.priority != Priority::BehindNonZeroBg || bg_pixel.index == 0)
+        {
+            return match obj_pixel.palette {
+                obj::Palette::ObjP0 => palettes.obj_0[obj_pixel.index],
+                obj::Palette::ObjP1 => palettes.obj_1[obj_pixel.index],
+            };
+        }
+    }
+
+    if lcdc.bg_window_enable {
         palettes.bg[bg_pixel.index]
     } else {
-        match obj_pixel.palette {
-            obj::Palette::ObjP0 => palettes.obj_0[obj_pixel.index],
-            obj::Palette::ObjP1 => palettes.obj_0[obj_pixel.index],
-        }
+        palette::Color::White
     }
 }
 

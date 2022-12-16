@@ -70,8 +70,7 @@ impl Cpu {
         }
 
         if self.registers.ime {
-            // TODO: Check interrupt handling priority.
-            if let Some(interrupt) = self.mmu.interrupts().into_iter().next() {
+            if let Some(interrupt) = self.mmu.next_interrupt() {
                 self.push_stack(self.registers.pc);
                 self.registers.pc = interrupt.address();
                 self.mmu.reset_interrupt(interrupt);
