@@ -108,8 +108,8 @@ impl Fetcher {
         scroll_x: u8,
         scroll_y: u8,
         vram: &[u8],
-        window_x: u8,
-        window_y: u8,
+        window_triggered: bool,
+        line_y_window: u8,
     ) -> bool {
         let check_for_obj = |last_checked: Option<usize>| {
             let mut obj_range = if let Some(idx) = last_checked {
@@ -126,15 +126,11 @@ impl Fetcher {
             return self.action.pending_obj();
         }
 
-        let in_window = lcdc.window_enable && x_pos >= window_x && line_y >= window_y;
-        let window_y_offset = if in_window {
-            (-(window_y as i16)) as u16
+        let bg_w_line = if !window_triggered {
+            (line_y as u16 + scroll_y as u16) % (Self::TILE_MAP_WIDTH * Self::SPRITE_HEIGHT)
         } else {
-            0
+            line_y_window as u16
         };
-
-        let bg_w_line = (line_y as u16 + scroll_y as u16 + window_y_offset)
-            % (Self::TILE_MAP_WIDTH * Self::SPRITE_HEIGHT);
 
         match self.action {
             Action::ObjReadAttr { prev_index } => {
@@ -214,7 +210,7 @@ impl Fetcher {
                 };
             }
             Action::BgReadTile => {
-                let (tile_map, scroll_offset) = if in_window {
+                let (tile_map, scroll_offset) = if window_triggered {
                     (lcdc.window_tile_map, 0)
                 } else {
                     (lcdc.bg_tile_map, scroll_x / 8)

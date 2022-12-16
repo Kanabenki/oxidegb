@@ -76,6 +76,8 @@ pub struct Ppu {
     x_pos: u8,
     pub line_y: u8,
     line_y_compare: u8,
+    line_y_window: u8,
+    window_triggered: bool,
     window_y: u8,
     window_x: u8,
     line_cycles_count: u8,
@@ -135,6 +137,8 @@ impl Ppu {
             x_pos: 0,
             line_y: 0,
             line_y_compare: 0,
+            line_y_window: 0,
+            window_triggered: false,
             window_y: 0,
             window_x: 0,
             line_cycles_count: 0,
@@ -166,14 +170,6 @@ impl Ppu {
                 }
             }
             Mode::PixelTransfer => {
-                if self.lcdc.window_enable
-                    && self.x_pos == self.window_x
-                    && self.line_y == self.window_y
-                {
-                    self.bg_fifo.clear();
-                    self.fetcher.start_window();
-                }
-
                 for _ in 0..4 {
                     self.tick_pixel_transfer();
 
@@ -182,6 +178,10 @@ impl Ppu {
                         self.fetcher.start_line();
                         self.visible_objs.clear();
                         self.x_pos = 0;
+                        if self.window_triggered {
+                            self.line_y_window += 1;
+                        }
+                        self.window_triggered = false;
 
                         self.stat.mode = Mode::HBlank;
 
@@ -208,6 +208,7 @@ impl Ppu {
             match self.line_y {
                 0..=Self::LAST_VISIBLE_LINE => self.stat.mode = Mode::OamSearch,
                 Self::LCD_SIZE_Y => {
+                    self.line_y_window = 0;
                     self.stat.mode = Mode::VBlank;
                     interrupts |= Interrupt::VBlank;
                     if self.stat.vblank_interrupt_enabled() {
@@ -243,6 +244,16 @@ impl Ppu {
     }
 
     fn tick_pixel_transfer(&mut self) {
+        if !self.window_triggered
+            && self.lcdc.window_enable
+            && self.x_pos == self.window_x + 1
+            && self.line_y >= self.window_y
+        {
+            self.window_triggered = true;
+            self.bg_fifo.clear();
+            self.fetcher.start_window();
+        }
+
         let pending = self.fetcher.tick(
             &mut self.bg_fifo,
             &mut self.obj_fifo,
@@ -253,8 +264,8 @@ impl Ppu {
             self.scroll_x,
             self.scroll_y,
             &self.vram,
-            self.window_x,
-            self.window_y,
+            self.window_triggered,
+            self.line_y_window,
         );
 
         if pending {
