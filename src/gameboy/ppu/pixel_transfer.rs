@@ -16,10 +16,6 @@ enum Action {
         data_l: u8,
         attr_index: usize,
     },
-    // TODO Check if this state is ever triggered
-    ObjWait {
-        pixels: [ObjPixel; 8],
-    },
     BgReadStartTile,
     BgReadStartDataL,
     BgReadStartDataH,
@@ -40,10 +36,7 @@ impl Action {
     fn pending_obj(&self) -> bool {
         matches!(
             self,
-            Action::ObjReadAttr { .. }
-                | Action::ObjReadDataL { .. }
-                | Action::ObjReadDataH { .. }
-                | Action::ObjWait { .. }
+            Action::ObjReadAttr { .. } | Action::ObjReadDataL { .. } | Action::ObjReadDataH { .. }
         )
     }
 }
@@ -112,17 +105,17 @@ impl Fetcher {
         window_triggered: bool,
         line_y_window: u8,
     ) -> bool {
-        let check_for_obj = || {
+        let next_obj = |visible_objs: &[Attributes], drawn_objs: &[bool]| {
             visible_objs
                 .iter()
                 .enumerate()
-                .position(|(i, obj)| obj.x == x_pos && !self.drawn_objs[i])
+                .position(|(i, obj)| obj.x == x_pos && !drawn_objs[i])
         };
 
         let waiting = self.waiting_cycle;
         self.waiting_cycle = !self.waiting_cycle;
         if waiting {
-            return self.action.pending_obj();
+            return next_obj(visible_objs, &self.drawn_objs).is_some();
         }
 
         let bg_w_line = if !window_triggered {
@@ -131,11 +124,15 @@ impl Fetcher {
             line_y_window as u16
         };
 
-        match self.action {
+        if !self.action.pending_obj() && next_obj(visible_objs, &self.drawn_objs).is_some() {
+            // There is a sprite to draw, abort current bg fetch
+            self.action = Action::ObjReadAttr;
+        }
+
+        self.action = match self.action {
             Action::ObjReadAttr => {
-                let attr_index = check_for_obj().unwrap();
-                self.drawn_objs[attr_index] = true;
-                self.action = Action::ObjReadDataL { attr_index };
+                let attr_index = next_obj(visible_objs, &self.drawn_objs).unwrap();
+                Action::ObjReadDataL { attr_index }
             }
             Action::ObjReadDataL { attr_index } => {
                 let obj = &visible_objs[attr_index];
@@ -154,7 +151,8 @@ impl Fetcher {
                 if obj.flip_x {
                     data_l = data_l.reverse_bits();
                 }
-                self.action = Action::ObjReadDataH {
+
+                Action::ObjReadDataH {
                     data_address,
                     data_l,
                     attr_index,
@@ -176,38 +174,27 @@ impl Fetcher {
                     palette: obj.palette,
                     priority: obj.priority,
                 });
-                if obj_fifo.push_line(&pixels) {
-                    self.action = if check_for_obj().is_some() {
-                        Action::ObjReadAttr
-                    } else {
-                        Action::BgReadTile
-                    }
+                obj_fifo.push_line(&pixels);
+                self.drawn_objs[attr_index] = true;
+                if next_obj(visible_objs, &self.drawn_objs).is_some() {
+                    Action::ObjReadAttr
                 } else {
-                    self.action = Action::ObjWait { pixels };
+                    Action::BgReadTile
                 }
             }
-            Action::ObjWait { pixels } => {
-                if obj_fifo.push_line(&pixels) {
-                    self.action = if check_for_obj().is_some() {
-                        Action::ObjReadAttr
-                    } else {
-                        Action::BgReadTile
-                    };
-                }
-            }
-            Action::BgReadStartTile => self.action = Action::BgReadStartDataL,
-            Action::BgReadStartDataL => self.action = Action::BgReadStartDataH,
+            Action::BgReadStartTile => Action::BgReadStartDataL,
+            Action::BgReadStartDataL => Action::BgReadStartDataH,
             Action::BgReadStartDataH => {
                 let pixels = [BgPixel { index: 0 }; 8];
-                self.action = if bg_fifo.push_line(&pixels) {
-                    if check_for_obj().is_some() {
+                if bg_fifo.push_line(&pixels) {
+                    if next_obj(visible_objs, &self.drawn_objs).is_some() {
                         Action::ObjReadAttr
                     } else {
                         Action::BgReadTile
                     }
                 } else {
                     Action::BgWait { pixels }
-                };
+                }
             }
             Action::BgReadTile => {
                 let (tile_map, scroll_offset) = if window_triggered {
@@ -217,21 +204,21 @@ impl Fetcher {
                 };
                 let tile_map_index =
                     (self.tile_map_index as u16 + scroll_offset as u16) % Self::TILE_MAP_WIDTH;
-                self.action = Action::BgReadDataL {
+
+                Action::BgReadDataL {
                     tile_index: vram[(tile_map.base_address()
                         + bg_w_line / 8 * Self::TILE_MAP_WIDTH
                         + tile_map_index) as usize],
-                };
-                self.tile_map_index = (self.tile_map_index + 1) % Self::TILE_MAP_WIDTH as u8;
+                }
             }
             Action::BgReadDataL { tile_index } => {
                 let data_address = lcdc
                     .bg_window_addressing
                     .address_from_index_bg(tile_index, bg_w_line);
-                self.action = Action::BgReadDataH {
+                Action::BgReadDataH {
                     data_address,
                     data_l: vram[data_address as usize],
-                };
+                }
             }
             Action::BgReadDataH {
                 data_address,
@@ -240,28 +227,24 @@ impl Fetcher {
                 let data_h = vram[data_address as usize + 1];
                 let indices = Self::unpack_indices(data_l, data_h);
                 let pixels = indices.map(|index| BgPixel { index });
-                self.action = if bg_fifo.push_line(&pixels) {
-                    if check_for_obj().is_some() {
-                        Action::ObjReadAttr
-                    } else {
-                        Action::BgReadTile
-                    }
+                if bg_fifo.push_line(&pixels) {
+                    self.tile_map_index = (self.tile_map_index + 1) % Self::TILE_MAP_WIDTH as u8;
+                    Action::BgReadTile
                 } else {
                     Action::BgWait { pixels }
-                };
-            }
-            Action::BgWait { ref pixels } => {
-                if bg_fifo.push_line(pixels) {
-                    self.action = if check_for_obj().is_some() {
-                        Action::ObjReadAttr
-                    } else {
-                        Action::BgReadTile
-                    }
                 }
             }
-        }
+            wait @ Action::BgWait { ref pixels } => {
+                if bg_fifo.push_line(pixels) {
+                    self.tile_map_index = (self.tile_map_index + 1) % Self::TILE_MAP_WIDTH as u8;
+                    Action::BgReadTile
+                } else {
+                    wait
+                }
+            }
+        };
 
-        self.action.pending_obj()
+        next_obj(visible_objs, &self.drawn_objs).is_some()
     }
 }
 
@@ -314,7 +297,7 @@ impl<T> PixelFifo<T> {
 }
 
 impl PixelFifo<ObjPixel> {
-    fn push_line(&mut self, pixels: &[ObjPixel; 8]) -> bool {
+    fn push_line(&mut self, pixels: &[ObjPixel; 8]) {
         // Fill available Fifo space with transparent pixels
         for i in self.size..Self::SIZE {
             self.fifo[(self.start + i) % Self::SIZE] = ObjPixel {
@@ -331,7 +314,6 @@ impl PixelFifo<ObjPixel> {
                 *pixel = new_pixel;
             }
         }
-        true
     }
 }
 
