@@ -165,6 +165,7 @@ impl Ppu {
                     self.stat.mode = Mode::PixelTransfer;
 
                     if self.stat.oam_interrupt_enabled() {
+                        // TODO: handle stat blocking
                         interrupts |= Interrupt::LcdStat;
                     }
                 }

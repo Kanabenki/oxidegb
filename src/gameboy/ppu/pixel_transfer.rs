@@ -124,6 +124,7 @@ impl Fetcher {
             line_y_window as u16
         };
 
+        // TODO: check if sprite fetch aborts bg fetch or wait for it to finish
         if !self.action.pending_obj() && next_obj(visible_objs, &self.drawn_objs).is_some() {
             // There is a sprite to draw, abort current bg fetch
             self.action = Action::ObjReadAttr;
@@ -178,6 +179,8 @@ impl Fetcher {
                 self.drawn_objs[attr_index] = true;
                 if next_obj(visible_objs, &self.drawn_objs).is_some() {
                     Action::ObjReadAttr
+                } else if x_pos == 0 {
+                    Action::BgReadStartTile
                 } else {
                     Action::BgReadTile
                 }

@@ -19,7 +19,12 @@ struct Emulator {
 }
 
 impl Emulator {
-    fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>, debug: bool) -> color_eyre::Result<Self> {
+    fn new(
+        rom: Vec<u8>,
+        bootrom: Option<Vec<u8>>,
+        fast_forward: bool,
+        debug: bool,
+    ) -> color_eyre::Result<Self> {
         let event_loop = EventLoop::new();
 
         let window = WindowBuilder::new()
@@ -31,7 +36,7 @@ impl Emulator {
             let surface_texture =
                 SurfaceTexture::new(window_size.width, window_size.height, &window);
             PixelsBuilder::new(160, 144, surface_texture)
-                .enable_vsync(true)
+                .enable_vsync(!fast_forward)
                 .build()?
         };
 
@@ -120,7 +125,6 @@ impl Emulator {
 #[command(author, version, about, long_about = None)]
 struct Arguments {
     /// The rom file to load
-    #[arg(short, long)]
     file: PathBuf,
     /// The bootrom file to load
     #[arg(short, long)]
@@ -131,6 +135,9 @@ struct Arguments {
     /// Enable the debugger
     #[arg(short, long)]
     debug: bool,
+    /// Do not limit fps
+    #[arg(short, long)]
+    fast_forward: bool,
 }
 
 fn main() -> color_eyre::Result<()> {
@@ -141,7 +148,7 @@ fn main() -> color_eyre::Result<()> {
     let bootrom = arguments
         .bootrom_file
         .map_or(Ok(None), |bootrom_file| fs::read(bootrom_file).map(Some))?;
-    let emulator = Emulator::new(rom, bootrom, arguments.debug)?;
+    let emulator = Emulator::new(rom, bootrom, arguments.fast_forward, arguments.debug)?;
     if arguments.info {
         println!("{:?}", emulator.gameboy.rom_header());
     }
