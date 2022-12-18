@@ -36,6 +36,7 @@ enum InputLine {
     Directions = 0b0001_0000,
     Buttons = 0b0010_0000,
     Both = 0b0011_0000,
+    None = 0b0000_0000,
 }
 
 #[derive(Debug)]
@@ -51,17 +52,20 @@ impl Buttons {
         Self {
             directions: 0x0F,
             buttons: 0x0F,
-            current_line: InputLine::Directions,
+            current_line: InputLine::None,
             interrupt_raised: false,
         }
     }
 
     const fn read(&self) -> u8 {
-        match self.current_line {
-            InputLine::Directions => (self.directions & 0xF) | self.current_line as u8,
-            InputLine::Buttons => (self.buttons & 0xF) | self.current_line as u8,
-            InputLine::Both => ((self.buttons | self.directions) & 0xF) | self.current_line as u8,
-        }
+        let nibble_l = match self.current_line {
+            InputLine::Directions => self.directions & 0xF,
+            InputLine::Buttons => self.buttons & 0xF,
+            InputLine::Both => 0,
+            InputLine::None => (self.buttons | self.directions) & 0xF,
+        };
+
+        0b1100_0000 | self.current_line as u8 | nibble_l
     }
 
     fn write(&mut self, value: u8) {
@@ -69,6 +73,7 @@ impl Buttons {
             0b01 => InputLine::Buttons,
             0b10 => InputLine::Directions,
             0b11 => InputLine::Both,
+            0b00 => InputLine::None,
             _ => unreachable!(),
         };
 
@@ -85,7 +90,7 @@ impl Buttons {
         let line = match button.line() {
             InputLine::Directions => &mut self.directions,
             InputLine::Buttons => &mut self.buttons,
-            InputLine::Both => unreachable!(),
+            InputLine::Both | InputLine::None => unreachable!(),
         };
 
         if set {

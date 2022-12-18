@@ -59,7 +59,7 @@ impl Cpu {
             ExecutionState::Continue => {}
             ExecutionState::Halt => {
                 if self.mmu.interrupts().is_empty() {
-                    self.mmu.tick();
+                    self.tick();
                     return self.cycles_count;
                 } else {
                     self.execution_state = ExecutionState::Continue;

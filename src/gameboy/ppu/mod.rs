@@ -149,7 +149,7 @@ impl Ppu {
         if !self.lcdc.lcd_enable {
             self.line_y = 0;
             self.stat.mode = Mode::VBlank;
-            return (FlagSet::new_truncated(0), DmaRequest::None);
+            return (FlagSet::default(), DmaRequest::None);
         }
 
         let mut interrupts = FlagSet::default();

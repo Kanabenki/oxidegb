@@ -73,7 +73,6 @@ pub struct Mmu {
     dma: Dma,
     interrupt_flags: FlagSet<Interrupt>,
     interrupt_enable: FlagSet<Interrupt>,
-    if_value: u8,
     ie_value: u8,
 }
 
@@ -88,7 +87,6 @@ impl Mmu {
             dma: Dma::None,
             interrupt_flags: FlagSet::default(),
             interrupt_enable: FlagSet::default(),
-            if_value: 0,
             ie_value: 0,
         })
     }
@@ -172,13 +170,13 @@ impl MemoryOps for Mmu {
             UNUSED_START..=UNUSED_END => 0xFF,
             IO_START..=IO_END => self.io.read(address),
             UNUSED_2_START..=UNUSED_2_END => 0xFF,
-            INTERRUPT_FLAGS => self.interrupt_flags.bits() | (self.if_value & 0b11100000),
+            INTERRUPT_FLAGS => self.interrupt_flags.bits() | 0b1110_0000,
             SPU_REGISTERS_START..=SPU_REGISTERS_END => 0xFF,
             PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.read_registers(address),
             DISABLE_BOOTROM => 0xFF,
             CGB_REGISTERS_START..=CGB_REGISTERS_END => 0xFF,
             HRAM_START..=HRAM_END => self.hram[(address - HRAM_START) as usize],
-            INTERRUPT_ENABLE => self.interrupt_enable.bits() | (self.ie_value & 0b11100000),
+            INTERRUPT_ENABLE => self.interrupt_enable.bits() | (self.ie_value & 0b1110_0000),
         }
     }
 
@@ -196,10 +194,7 @@ impl MemoryOps for Mmu {
             UNUSED_START..=UNUSED_END => {}
             IO_START..=IO_END => self.io.write(address, value),
             UNUSED_2_START..=UNUSED_2_END => {}
-            INTERRUPT_FLAGS => {
-                self.interrupt_flags = FlagSet::new_truncated(value);
-                self.if_value = value;
-            }
+            INTERRUPT_FLAGS => self.interrupt_flags = FlagSet::new_truncated(value),
             SPU_REGISTERS_START..=SPU_REGISTERS_END => {}
             PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.write_registers(address, value),
             DISABLE_BOOTROM => {
