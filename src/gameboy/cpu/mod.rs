@@ -8,7 +8,7 @@ use super::mmu::{MemoryOps, Mmu};
 use crate::error::Error;
 
 #[derive(Debug)]
-pub(crate) enum ExecutionState {
+pub enum ExecutionState {
     Continue,
     Stop,
     IllegalInstruction,
@@ -22,7 +22,7 @@ pub struct Cpu {
     // TODO cleanup visibility
     pub(super) mmu: Mmu,
     cycles_count: u32,
-    pub(crate) execution_state: ExecutionState,
+    pub execution_state: ExecutionState,
 }
 
 impl MemoryOps for Cpu {

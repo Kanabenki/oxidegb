@@ -1,6 +1,8 @@
 use flagset::FlagSet;
 
-use super::{cartridge::Cartridge, interrupts::Interrupt, io::Io, ppu::DmaRequest, ppu::Ppu};
+use super::{
+    apu::Apu, cartridge::Cartridge, interrupts::Interrupt, io::Io, ppu::DmaRequest, ppu::Ppu,
+};
 use crate::error::Error;
 
 mod map {
@@ -23,8 +25,8 @@ mod map {
     pub const UNUSED_2_START: u16 = 0xFF08;
     pub const UNUSED_2_END: u16 = 0xFF0E;
     pub const INTERRUPT_FLAGS: u16 = 0xFF0F;
-    pub const SPU_REGISTERS_START: u16 = 0xFF10;
-    pub const SPU_REGISTERS_END: u16 = 0xFF3F;
+    pub const APU_REGISTERS_START: u16 = 0xFF10;
+    pub const APU_REGISTERS_END: u16 = 0xFF3F;
     pub const PPU_REGISTERS_START: u16 = 0xFF40;
     pub const PPU_REGISTERS_END: u16 = 0xFF4F;
     pub const DISABLE_BOOTROM: u16 = 0xFF50;
@@ -67,6 +69,7 @@ pub trait MemoryOps {
 pub struct Mmu {
     wram: [u8; 8192],
     hram: [u8; 127],
+    apu: Apu,
     pub(super) ppu: Ppu,
     pub(super) io: Io,
     pub(super) cartridge: Cartridge,
@@ -81,6 +84,7 @@ impl Mmu {
         Ok(Self {
             wram: [0; 8192],
             hram: [0; 127],
+            apu: Apu::new(),
             ppu: Ppu::new(),
             io: Io::new(),
             cartridge: Cartridge::new(rom, bootrom)?,
@@ -171,7 +175,7 @@ impl MemoryOps for Mmu {
             IO_START..=IO_END => self.io.read(address),
             UNUSED_2_START..=UNUSED_2_END => 0xFF,
             INTERRUPT_FLAGS => self.interrupt_flags.bits() | 0b1110_0000,
-            SPU_REGISTERS_START..=SPU_REGISTERS_END => 0x00,
+            APU_REGISTERS_START..=APU_REGISTERS_END => self.apu.read(address),
             PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.read_registers(address),
             DISABLE_BOOTROM => 0xFF,
             CGB_REGISTERS_START..=CGB_REGISTERS_END => 0xFF,
@@ -195,7 +199,7 @@ impl MemoryOps for Mmu {
             IO_START..=IO_END => self.io.write(address, value),
             UNUSED_2_START..=UNUSED_2_END => {}
             INTERRUPT_FLAGS => self.interrupt_flags = FlagSet::new_truncated(value),
-            SPU_REGISTERS_START..=SPU_REGISTERS_END => {}
+            APU_REGISTERS_START..=APU_REGISTERS_END => self.apu.write(address, value),
             PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.write_registers(address, value),
             DISABLE_BOOTROM => {
                 if value != 0 {

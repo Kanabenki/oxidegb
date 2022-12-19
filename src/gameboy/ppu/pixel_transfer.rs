@@ -263,7 +263,7 @@ pub struct ObjPixel {
     pub priority: obj::Priority,
 }
 
-pub(crate) fn mix_pixels(
+pub fn mix_pixels(
     bg_pixel: BgPixel,
     obj_pixel: Option<ObjPixel>,
     lcdc: &LcdControl,

@@ -1,3 +1,4 @@
+mod apu;
 mod cartridge;
 mod cpu;
 mod interrupts;

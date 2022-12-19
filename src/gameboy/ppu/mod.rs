@@ -49,10 +49,10 @@ impl From<[u8; 4]> for Color {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct Palettes {
-    pub(crate) bg: Palette,
-    pub(crate) obj_0: Palette,
-    pub(crate) obj_1: Palette,
+pub struct Palettes {
+    pub bg: Palette,
+    pub obj_0: Palette,
+    pub obj_1: Palette,
 }
 
 #[derive(Debug)]
