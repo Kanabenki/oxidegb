@@ -123,10 +123,11 @@ impl Gameboy {
                 DebugCommand::Registers => {
                     // TODO Better debug print
                     println!(
-                        "{:X?}\nIE: {:?}\nIF: {:?}",
+                        "{:X?}\nIE: {:?}\nIF: {:?}\n State: {:?}",
                         self.cpu.registers(),
                         self.cpu.mmu.interrupt_enable(),
-                        self.cpu.mmu.interrupt_flags()
+                        self.cpu.mmu.interrupt_flags(),
+                        self.cpu.execution_state,
                     );
                 }
                 DebugCommand::Step => {

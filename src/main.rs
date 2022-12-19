@@ -103,7 +103,7 @@ impl Emulator {
                     event: WindowEvent::CloseRequested,
                 } if window_id == self.window.id() => *control_flow = ControlFlow::Exit,
                 Event::MainEventsCleared => {
-                    let ticks = (59_727.5
+                    let ticks = (60_000.0
                         / self
                             .window
                             .current_monitor()

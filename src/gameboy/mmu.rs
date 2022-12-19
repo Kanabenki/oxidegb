@@ -171,7 +171,7 @@ impl MemoryOps for Mmu {
             IO_START..=IO_END => self.io.read(address),
             UNUSED_2_START..=UNUSED_2_END => 0xFF,
             INTERRUPT_FLAGS => self.interrupt_flags.bits() | 0b1110_0000,
-            SPU_REGISTERS_START..=SPU_REGISTERS_END => 0xFF,
+            SPU_REGISTERS_START..=SPU_REGISTERS_END => 0x00,
             PPU_REGISTERS_START..=PPU_REGISTERS_END => self.ppu.read_registers(address),
             DISABLE_BOOTROM => 0xFF,
             CGB_REGISTERS_START..=CGB_REGISTERS_END => 0xFF,
