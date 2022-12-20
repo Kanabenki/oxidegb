@@ -1,6 +1,11 @@
 use std::{fs, path::PathBuf};
 
 use clap::Parser;
+use color_eyre::{eyre::eyre, Report};
+use cpal::{
+    traits::{DeviceTrait, HostTrait, StreamTrait},
+    Sample, SampleRate, StreamConfig,
+};
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use winit::{
     event::{ElementState, Event, VirtualKeyCode, WindowEvent},
@@ -42,6 +47,33 @@ impl Emulator {
 
         let gameboy = Gameboy::new(rom, bootrom, debug)?;
         let event_loop = Some(event_loop);
+
+        let sound_host = cpal::default_host();
+        let sound_device = sound_host
+            .default_output_device()
+            .ok_or(eyre!("Could not find an audio device"))?;
+
+        let stream_config = StreamConfig {
+            channels: 2,
+            sample_rate: SampleRate(44_100),
+            buffer_size: cpal::BufferSize::Default,
+        };
+
+        let stream = sound_device.build_output_stream(
+            &stream_config,
+            move |data: &mut [f32], _| {
+                for frame in data.chunks_mut(2) {
+                    for sample in frame.iter_mut() {
+                        *sample = Sample::from(&0.0);
+                    }
+                }
+            },
+            move |error| eprintln!("Error occurred in audio stream: {}", Report::from(error)),
+        )?;
+
+        stream.play()?;
+
+        std::thread::sleep(std::time::Duration::from_millis(1000));
 
         Ok(Self {
             event_loop,

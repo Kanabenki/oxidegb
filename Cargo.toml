@@ -12,3 +12,4 @@ flagset = "0.4.3"
 enum_dispatch = "0.3.8"
 color-eyre = "0.6.2"
 clap = { version = "4.0.29", features = ["derive"] }
+cpal = "0.14.2"
