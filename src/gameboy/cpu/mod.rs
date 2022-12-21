@@ -21,7 +21,7 @@ pub struct Cpu {
     enable_ime: bool,
     // TODO cleanup visibility
     pub(super) mmu: Mmu,
-    cycles_count: u32,
+    cycles: u64,
     pub execution_state: ExecutionState,
 }
 
@@ -48,25 +48,25 @@ impl Cpu {
             registers,
             enable_ime: false,
             mmu: Mmu::new(rom, bootrom)?,
-            cycles_count: 0,
+            cycles: 0,
             execution_state: ExecutionState::Continue,
         })
     }
 
-    pub fn next_instruction(&mut self) -> u32 {
+    pub fn next_instruction(&mut self) -> u64 {
         // TODO Ensure proper behaviour for those.
         match self.execution_state {
             ExecutionState::Continue => {}
             ExecutionState::Halt => {
                 if self.mmu.interrupts().is_empty() {
                     self.tick();
-                    return self.cycles_count;
+                    return self.cycles;
                 } else {
                     self.execution_state = ExecutionState::Continue;
                 }
             }
             ExecutionState::Stop => todo!(),
-            ExecutionState::IllegalInstruction => return self.cycles_count,
+            ExecutionState::IllegalInstruction => return self.cycles,
         }
 
         if self.registers.ime {
@@ -76,7 +76,7 @@ impl Cpu {
                 self.mmu.reset_interrupt(interrupt);
                 self.registers.ime = false;
 
-                return self.cycles_count;
+                return self.cycles;
             }
         }
 
@@ -89,16 +89,12 @@ impl Cpu {
 
         Self::OPCODE_TABLE[opcode as usize](self, opcode);
 
-        self.cycles_count
+        self.cycles
     }
 
     fn tick(&mut self) {
-        self.cycles_count += 4;
+        self.cycles += 4;
         self.mmu.tick();
-    }
-
-    pub fn reset_cycles(&mut self) {
-        self.cycles_count = 0;
     }
 
     fn fetch_byte_pc(&mut self) -> u8 {
@@ -157,5 +153,9 @@ impl Cpu {
 
     pub const fn registers(&self) -> &Registers {
         &self.registers
+    }
+
+    pub fn cycles(&self) -> u64 {
+        self.cycles
     }
 }

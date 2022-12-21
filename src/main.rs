@@ -1,12 +1,14 @@
 use std::{fs, path::PathBuf};
 
+use blip_buf::BlipBuf;
 use clap::Parser;
 use color_eyre::{eyre::eyre, Report};
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
-    Sample, SampleRate, StreamConfig,
+    SampleFormat, SampleRate, Stream, StreamConfig,
 };
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
+use ringbuf::{HeapProducer, HeapRb};
 use winit::{
     event::{ElementState, Event, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -19,8 +21,12 @@ struct Emulator {
     event_loop: Option<EventLoop<()>>,
     window: Window,
     pixels: Pixels,
+    tmp_sound_buf: [i16; 2048],
+    resampling_bufs: (BlipBuf, BlipBuf),
+    sound_prod: HeapProducer<i16>,
+    _sound_stream: Stream,
     gameboy: Gameboy,
-    delta: u32,
+    delta: u64,
 }
 
 impl Emulator {
@@ -48,30 +54,45 @@ impl Emulator {
         let gameboy = Gameboy::new(rom, bootrom, debug)?;
         let event_loop = Some(event_loop);
 
+        let sample_rate_out = 44100;
         let sound_host = cpal::default_host();
         let sound_device = sound_host
             .default_output_device()
             .ok_or(eyre!("Could not find an audio device"))?;
+        let stream_config: StreamConfig = sound_device
+            .supported_input_configs()?
+            .find(|config| {
+                config.channels() == 2
+                    && config.sample_format() == SampleFormat::I16
+                    && config.min_sample_rate().0 <= sample_rate_out
+                    && config.max_sample_rate().0 >= sample_rate_out
+            })
+            .ok_or(eyre!("Could not find a compatible audio configuration"))?
+            .with_sample_rate(SampleRate(44100))
+            .into();
 
-        let stream_config = StreamConfig {
-            channels: 2,
-            sample_rate: SampleRate(44_100),
-            buffer_size: cpal::BufferSize::Default,
+        let blip_buf = || {
+            let mut buf = BlipBuf::new(512);
+            buf.set_rates(
+                (Gameboy::CYCLES_PER_SECOND / 4) as f64,
+                sample_rate_out as f64,
+            );
+            buf
         };
 
-        let stream = sound_device.build_output_stream(
+        let resampling_bufs = (blip_buf(), blip_buf());
+
+        let (sound_prod, mut sound_cons) = HeapRb::new(2048).split();
+
+        let sound_stream = sound_device.build_output_stream(
             &stream_config,
-            move |data: &mut [f32], _| {
-                for frame in data.chunks_mut(2) {
-                    for sample in frame.iter_mut() {
-                        *sample = Sample::from(&0.0);
-                    }
-                }
+            move |data: &mut [i16], _| {
+                sound_cons.pop_slice(data);
             },
             move |error| eprintln!("Error occurred in audio stream: {}", Report::from(error)),
         )?;
 
-        stream.play()?;
+        sound_stream.play()?;
 
         std::thread::sleep(std::time::Duration::from_millis(1000));
 
@@ -79,6 +100,10 @@ impl Emulator {
             event_loop,
             window,
             pixels,
+            sound_prod,
+            tmp_sound_buf: [0; 2048],
+            _sound_stream: sound_stream,
+            resampling_bufs,
             gameboy,
             delta: 0,
         })
@@ -135,15 +160,41 @@ impl Emulator {
                     event: WindowEvent::CloseRequested,
                 } if window_id == self.window.id() => *control_flow = ControlFlow::Exit,
                 Event::MainEventsCleared => {
-                    let ticks = (60_000.0
-                        / self
-                            .window
-                            .current_monitor()
-                            .unwrap()
-                            .refresh_rate_millihertz()
-                            .unwrap() as f32
-                        * Gameboy::TICKS_PER_FRAME as f32) as u32;
-                    self.delta = self.gameboy.run(ticks, self.delta);
+                    let refresh_rate = self
+                        .window
+                        .current_monitor()
+                        .unwrap()
+                        .refresh_rate_millihertz()
+                        .unwrap() as f32;
+                    let ticks = (1000.0 * Gameboy::CYCLES_PER_SECOND as f32 / refresh_rate) as u64;
+
+                    let mut total_cycles = 0;
+                    self.delta = loop {
+                        total_cycles += self.gameboy.run_instruction();
+                        // Handle audio.
+                        {
+                            let (left, right, count) = self.gameboy.samples();
+                            let (left_buf, right_buf) = &mut self.resampling_bufs;
+                            let mut offset = 0;
+                            for (&left, &right) in left[..count].iter().zip(&right[..count]) {
+                                left_buf.add_delta(offset, left as i32);
+                                right_buf.add_delta(offset, right as i32);
+                                offset += 4;
+                            }
+                            left_buf.end_frame(offset);
+                            right_buf.end_frame(offset);
+                            let available = left_buf.samples_avail();
+                            if available > 0 {
+                                // TODO: Interleave directly in the ring buffer?
+                                left_buf.read_samples(&mut self.tmp_sound_buf, true);
+                                right_buf.read_samples(&mut self.tmp_sound_buf[1..], true);
+                                self.sound_prod.push_slice(&self.tmp_sound_buf[..]);
+                            }
+                        }
+                        if total_cycles >= ticks - self.delta {
+                            break total_cycles - (ticks - self.delta);
+                        }
+                    };
                     self.window.request_redraw();
                 }
                 _ => (),

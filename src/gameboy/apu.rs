@@ -1,6 +1,8 @@
 // TODO: Remove when everything is defined
 #![allow(dead_code)]
 
+use std::mem;
+
 enum ChannelIdx {
     C1,
     C2,
@@ -149,6 +151,9 @@ struct Channel3 {
 
 #[derive(Debug, Default)]
 pub struct Apu {
+    left_samples: [i16; 6],
+    right_samples: [i16; 6],
+    samples_count: usize,
     master_vol_vin_pan: MasterVolVinPan,
     sound_panning: SoundPanning,
     sound_enable: SoundEnable,
@@ -163,12 +168,27 @@ impl Apu {
         Default::default()
     }
 
+    pub fn tick(&mut self) {
+        if self.samples_count >= 6 {
+            // Samples were not fetched, we skip them.
+            self.samples_count = 0;
+        }
+        self.left_samples[self.samples_count] = 0;
+        self.right_samples[self.samples_count] = 0;
+        self.samples_count += 1;
+    }
+
+    pub fn samples(&mut self) -> ([i16; 6], [i16; 6], usize) {
+        let count = mem::replace(&mut self.samples_count, 0);
+        (self.left_samples, self.right_samples, count)
+    }
+
     pub fn read(&self, address: u16) -> u8 {
         match address {
             Self::MASTER_VOL_VIN_PAN_ADDRESS => self.master_vol_vin_pan.value(),
             Self::SOUND_PANNING_ADDRESS => self.sound_panning.value(),
             Self::SOUND_ENABLE_ADDRESS => self.sound_enable.value(),
-            _ => unreachable!("Tried to read invalid address {address:04X} in apu"),
+            _ => 0x00, //unreachable!("Tried to read invalid address {address:04X} in apu"),
         }
     }
 
@@ -177,7 +197,7 @@ impl Apu {
             Self::MASTER_VOL_VIN_PAN_ADDRESS => self.master_vol_vin_pan.set_value(value),
             Self::SOUND_PANNING_ADDRESS => self.sound_panning.set_value(value),
             Self::SOUND_ENABLE_ADDRESS => self.sound_enable.all = value & 0b1000_0000 != 0,
-            _ => unreachable!("Tried to write invalid address {address:04X} in apu"),
+            _ => {} //unreachable!("Tried to write invalid address {address:04X} in apu"),
         }
     }
 }

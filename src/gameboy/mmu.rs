@@ -69,7 +69,7 @@ pub trait MemoryOps {
 pub struct Mmu {
     wram: [u8; 8192],
     hram: [u8; 127],
-    apu: Apu,
+    pub(super) apu: Apu,
     pub(super) ppu: Ppu,
     pub(super) io: Io,
     pub(super) cartridge: Cartridge,
