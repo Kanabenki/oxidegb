@@ -96,6 +96,7 @@ impl Mmu {
     }
 
     pub fn tick(&mut self) {
+        self.apu.tick();
         let io_interrupts = self.io.tick();
         let (ppu_interrupts, dma) = self.ppu.tick();
         self.interrupt_flags |= io_interrupts | ppu_interrupts;

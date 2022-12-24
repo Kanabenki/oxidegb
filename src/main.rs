@@ -135,6 +135,7 @@ impl Emulator {
                             ElementState::Released => false,
                         };
                         // TODO: Inputs are hardcoded for now.
+                        // TODO: Check how to handle input being pressed during gb frame loop instead of waiting for the end of the frame
                         match key {
                             VirtualKeyCode::P if set => self.gameboy.debug_break(),
                             VirtualKeyCode::Up => self.gameboy.set_button(Button::Up, set),

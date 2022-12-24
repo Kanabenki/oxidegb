@@ -1,24 +1,14 @@
-// TODO: Remove when everything is defined
-#![allow(dead_code)]
-
 use std::mem;
 
-enum ChannelIdx {
-    C1,
-    C2,
-    C3,
-    C4,
-}
-
 #[derive(Debug, Default)]
-struct Channels<T> {
-    channel_1: T,
-    channel_2: T,
-    channel_3: T,
-    channel_4: T,
+struct ChannelToggles {
+    channel_1: bool,
+    channel_2: bool,
+    channel_3: bool,
+    channel_4: bool,
 }
 
-impl Channels<bool> {
+impl ChannelToggles {
     fn value(&self) -> u8 {
         self.channel_1 as u8
             | (self.channel_2 as u8) << 1
@@ -42,7 +32,7 @@ impl Channels<bool> {
 
 #[derive(Debug, Default)]
 struct SoundEnable {
-    channels: Channels<bool>,
+    channels: ChannelToggles,
     all: bool,
 }
 
@@ -55,8 +45,8 @@ impl SoundEnable {
 
 #[derive(Debug, Default)]
 struct SoundPanning {
-    left: Channels<bool>,
-    right: Channels<bool>,
+    left: ChannelToggles,
+    right: ChannelToggles,
 }
 
 impl SoundPanning {
@@ -65,8 +55,8 @@ impl SoundPanning {
     }
 
     fn set_value(&mut self, value: u8) {
-        self.left = Channels::from_nibble(value >> 4);
-        self.right = Channels::from_nibble(value & 0b1111);
+        self.left = ChannelToggles::from_nibble(value >> 4);
+        self.right = ChannelToggles::from_nibble(value & 0b1111);
     }
 }
 
@@ -93,31 +83,111 @@ impl MasterVolVinPan {
     }
 }
 
+#[derive(Debug, Copy, Clone, Default)]
 enum SweepOp {
+    #[default]
     Increase = 0,
     Decrease = 1,
 }
 
+#[derive(Debug, Default)]
 struct Sweep {
     pace: u8,
     op: SweepOp,
     slope_ctrl: u8,
 }
+impl Sweep {
+    fn value(&self) -> u8 {
+        self.pace & 0b111 << 4 | (self.op as u8) << 3 | self.slope_ctrl & 0b111
+    }
 
-struct LenDutyCycle {
-    wave_duty: u8,
+    fn set_value(&mut self, value: u8) {
+        self.pace = (value >> 4) & 0b111;
+        self.op = if value & 0b1000 == 0 {
+            SweepOp::Increase
+        } else {
+            SweepOp::Decrease
+        };
+        self.slope_ctrl = value & 0b111;
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+enum WaveDuty {
+    #[default]
+    W0 = 0,
+    W1 = 1,
+    W2 = 2,
+    W3 = 3,
+}
+
+type _Waveform = [bool; 8];
+
+impl WaveDuty {
+    const _WAVEFORMS: [_Waveform; 4] = [
+        [true, true, true, true, true, true, true, false],
+        [false, true, true, true, true, true, true, false],
+        [false, true, true, true, true, false, false, false],
+        [true, false, false, false, false, false, false, true],
+    ];
+
+    const fn _waveform(&self) -> &_Waveform {
+        &Self::_WAVEFORMS[*self as usize]
+    }
+}
+
+#[derive(Debug, Default)]
+struct WaveDutyTimerLen {
+    wave_duty: WaveDuty,
     init_len_timer: u8,
 }
 
+impl WaveDutyTimerLen {
+    fn value(&self) -> u8 {
+        // TODO: check low bits value
+        (self.wave_duty as u8) << 6
+    }
+
+    fn set_value(&mut self, value: u8) {
+        self.wave_duty = match value >> 6 {
+            0 => WaveDuty::W0,
+            1 => WaveDuty::W1,
+            2 => WaveDuty::W2,
+            3 => WaveDuty::W3,
+            _ => unreachable!(),
+        };
+
+        self.init_len_timer = value & 0b11111;
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
 enum EnvelopeDir {
+    #[default]
     Decrease = 0,
     Increase = 1,
 }
 
+#[derive(Debug, Default)]
 struct VolumeEnvelope {
     initial: u8,
     direction: EnvelopeDir,
     sweep_pace: u8,
+}
+impl VolumeEnvelope {
+    fn value(&self) -> u8 {
+        self.initial << 4 | (self.direction as u8) << 3 | self.sweep_pace & 0b111
+    }
+
+    fn set_value(&mut self, value: u8) {
+        self.initial = value >> 4;
+        self.direction = if value & 0b1000 == 0 {
+            EnvelopeDir::Decrease
+        } else {
+            EnvelopeDir::Increase
+        };
+        self.sweep_pace = value & 0b111;
+    }
 }
 
 #[derive(Debug, Default)]
@@ -126,27 +196,44 @@ struct WavelenCtrl {
     sound_len_enable: bool,
     wavelen_high: u8,
 }
+impl WavelenCtrl {
+    fn value(&self) -> u8 {
+        // TODO check unused/write only bits read value
+        (self.sound_len_enable as u8) << 6
+    }
 
+    fn set_value(&mut self, value: u8) {
+        self.trigger = value & 0b1000_0000 != 0;
+        self.sound_len_enable = value & 0b100_0000 != 0;
+        self.wavelen_high = value & 0b111;
+    }
+}
+
+#[derive(Debug, Default)]
 struct Channel1 {
     sweep: Sweep,
-    len_duty_cycle: LenDutyCycle,
+    wave_duty_timer_len: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
     wavelen_low: u8,
     wavelen_high_ctrl: WavelenCtrl,
 }
 
+#[derive(Debug, Default)]
 struct Channel2 {
-    len_duty_cycle: LenDutyCycle,
+    wave_duty_timer_len: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
     wavelen_low: u8,
     wavelen_high_ctrl: WavelenCtrl,
 }
 
+#[derive(Debug, Default)]
 struct Channel3 {
     enable: bool,
     len_timer: u8,
     out_level: u8,
     wavelen_low: u8,
+    wavelen_high_ctrl: WavelenCtrl,
+    wave_pattern: [u8; 16],
 }
 
 #[derive(Debug, Default)]
@@ -157,9 +244,33 @@ pub struct Apu {
     master_vol_vin_pan: MasterVolVinPan,
     sound_panning: SoundPanning,
     sound_enable: SoundEnable,
+    channel_1: Channel1,
+    channel_2: Channel2,
+    channel_3: Channel3,
 }
 
 impl Apu {
+    const CH1_SWEEP_ADDRESS: u16 = 0xFF10;
+    const CH1_WAVE_DUTY_TIMER_LEN_ADDRESS: u16 = 0xFF11;
+    const CH1_VOLUME_ENVELOPPE_ADDRESS: u16 = 0xFF12;
+    const CH1_WAVELEN_LOW_ADDRESS: u16 = 0xFF13;
+    const CH1_WAVELEN_HIGH_CTRL_ADDRESS: u16 = 0xFF14;
+
+    const CH2_UNUSED_ADDRESS: u16 = 0xFF15;
+    const CH2_WAVE_DUTY_TIMER_LEN_ADDRESS: u16 = 0xFF16;
+    const CH2_VOLUME_ENVELOPPE_ADDRESS: u16 = 0xFF17;
+    const CH2_WAVELEN_LOW_ADDRESS: u16 = 0xFF18;
+    const CH2_WAVELEN_HIGH_CTRL_ADDRESS: u16 = 0xFF19;
+
+    const CH3_ENABLE_ADDRESS: u16 = 0xFF1A;
+    const CH3_LEN_TIMER_ADDRESS: u16 = 0xFF1B;
+    const CH3_OUT_LEVEL_ADDRESS: u16 = 0xFF1C;
+    const CH3_WAVELEN_LOW_ADDRESS: u16 = 0xFF1D;
+    const CH3_WAVELEN_HIGH_CTRL_ADDRESS: u16 = 0xFF1E;
+
+    const CH3_WAVE_PATTERN_START_ADDRESS: u16 = 0xFF30;
+    const CH3_WAVE_PATTERN_END_ADDRESS: u16 = 0xFF3F;
+
     const MASTER_VOL_VIN_PAN_ADDRESS: u16 = 0xFF24;
     const SOUND_PANNING_ADDRESS: u16 = 0xFF25;
     const SOUND_ENABLE_ADDRESS: u16 = 0xFF26;
@@ -185,6 +296,27 @@ impl Apu {
 
     pub fn read(&self, address: u16) -> u8 {
         match address {
+            Self::CH1_SWEEP_ADDRESS => self.channel_1.sweep.value(),
+            Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.channel_1.wave_duty_timer_len.value(),
+            Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.channel_1.vol_env.value(),
+            Self::CH1_WAVELEN_LOW_ADDRESS => 0xFF,
+            Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_1.wavelen_high_ctrl.value(),
+
+            Self::CH2_UNUSED_ADDRESS => 0xFF,
+            Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => self.channel_2.wave_duty_timer_len.value(),
+            Self::CH2_VOLUME_ENVELOPPE_ADDRESS => self.channel_2.vol_env.value(),
+            Self::CH2_WAVELEN_LOW_ADDRESS => 0xFF,
+            Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_2.wavelen_high_ctrl.value(),
+
+            Self::CH3_ENABLE_ADDRESS => (self.channel_3.enable as u8) << 7,
+            Self::CH3_LEN_TIMER_ADDRESS => 0xFF,
+            Self::CH3_OUT_LEVEL_ADDRESS => self.channel_3.out_level,
+            Self::CH3_WAVELEN_LOW_ADDRESS => 0xFF,
+            Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_3.wavelen_high_ctrl.value(),
+            Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS => {
+                self.channel_3.wave_pattern[(address & 0xF) as usize]
+            }
+
             Self::MASTER_VOL_VIN_PAN_ADDRESS => self.master_vol_vin_pan.value(),
             Self::SOUND_PANNING_ADDRESS => self.sound_panning.value(),
             Self::SOUND_ENABLE_ADDRESS => self.sound_enable.value(),
@@ -194,6 +326,37 @@ impl Apu {
 
     pub fn write(&mut self, address: u16, value: u8) {
         match address {
+            Self::CH1_SWEEP_ADDRESS => self.channel_1.sweep.set_value(value),
+            Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.channel_1.vol_env.set_value(value),
+            Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => {
+                self.channel_1.wave_duty_timer_len.set_value(value)
+            }
+            Self::CH1_WAVELEN_LOW_ADDRESS => self.channel_1.wavelen_low = value,
+            Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => {
+                self.channel_1.wavelen_high_ctrl.set_value(value)
+            }
+
+            Self::CH2_UNUSED_ADDRESS => {}
+            Self::CH2_VOLUME_ENVELOPPE_ADDRESS => self.channel_2.vol_env.set_value(value),
+            Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => {
+                self.channel_2.wave_duty_timer_len.set_value(value)
+            }
+            Self::CH2_WAVELEN_LOW_ADDRESS => self.channel_2.wavelen_low = value,
+            Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => {
+                self.channel_2.wavelen_high_ctrl.set_value(value)
+            }
+
+            Self::CH3_ENABLE_ADDRESS => self.channel_3.enable = value & 0b1000_0000 != 0,
+            Self::CH3_LEN_TIMER_ADDRESS => self.channel_3.len_timer = value,
+            Self::CH3_OUT_LEVEL_ADDRESS => self.channel_3.out_level = (value & 0b11) << 5,
+            Self::CH3_WAVELEN_LOW_ADDRESS => self.channel_3.wavelen_low = value,
+            Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => {
+                self.channel_3.wavelen_high_ctrl.set_value(value)
+            }
+            Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS => {
+                self.channel_3.wave_pattern[(address & 0xF) as usize] = value
+            }
+
             Self::MASTER_VOL_VIN_PAN_ADDRESS => self.master_vol_vin_pan.set_value(value),
             Self::SOUND_PANNING_ADDRESS => self.sound_panning.set_value(value),
             Self::SOUND_ENABLE_ADDRESS => self.sound_enable.all = value & 0b1000_0000 != 0,
