@@ -236,6 +236,44 @@ struct Channel3 {
     wave_pattern: [u8; 16],
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+enum LfsrWidth {
+    #[default]
+    B15 = 0,
+    B7 = 1,
+}
+
+#[derive(Debug, Default)]
+struct FreqRand {
+    clock_shift: u8,
+    lfsr_width: LfsrWidth,
+    clock_divider: u8,
+}
+impl FreqRand {
+    fn value(&self) -> u8 {
+        (self.clock_shift & 0b1111) << 4 | (self.lfsr_width as u8) << 3 | self.clock_divider & 0b111
+    }
+
+    fn set_value(&mut self, value: u8) {
+        self.clock_shift = value >> 4;
+        self.lfsr_width = if value & 0b1000 == 0 {
+            LfsrWidth::B15
+        } else {
+            LfsrWidth::B7
+        };
+        self.clock_divider = value & 0b111;
+    }
+}
+
+#[derive(Debug, Default)]
+struct Channel4 {
+    len_timer: u8,
+    vol_env: VolumeEnvelope,
+    freq_rand: FreqRand,
+    trigger: bool,
+    sound_len_enable: bool,
+}
+
 #[derive(Debug, Default)]
 pub struct Apu {
     left_samples: [i16; 6],
@@ -247,6 +285,7 @@ pub struct Apu {
     channel_1: Channel1,
     channel_2: Channel2,
     channel_3: Channel3,
+    channel_4: Channel4,
 }
 
 impl Apu {
@@ -262,18 +301,23 @@ impl Apu {
     const CH2_WAVELEN_LOW_ADDRESS: u16 = 0xFF18;
     const CH2_WAVELEN_HIGH_CTRL_ADDRESS: u16 = 0xFF19;
 
+    const CH4_LEN_TIMER_ADDRESS: u16 = 0xFF20;
+    const CH4_VOLUME_ENVELOPPE_ADDRESS: u16 = 0xFF21;
+    const CH4_FREQ_RAND_ADDRESS: u16 = 0xFF22;
+    const CH4_CTRL_ADDRESS: u16 = 0xFF23;
+
     const CH3_ENABLE_ADDRESS: u16 = 0xFF1A;
     const CH3_LEN_TIMER_ADDRESS: u16 = 0xFF1B;
     const CH3_OUT_LEVEL_ADDRESS: u16 = 0xFF1C;
     const CH3_WAVELEN_LOW_ADDRESS: u16 = 0xFF1D;
     const CH3_WAVELEN_HIGH_CTRL_ADDRESS: u16 = 0xFF1E;
 
-    const CH3_WAVE_PATTERN_START_ADDRESS: u16 = 0xFF30;
-    const CH3_WAVE_PATTERN_END_ADDRESS: u16 = 0xFF3F;
-
     const MASTER_VOL_VIN_PAN_ADDRESS: u16 = 0xFF24;
     const SOUND_PANNING_ADDRESS: u16 = 0xFF25;
     const SOUND_ENABLE_ADDRESS: u16 = 0xFF26;
+
+    const CH3_WAVE_PATTERN_START_ADDRESS: u16 = 0xFF30;
+    const CH3_WAVE_PATTERN_END_ADDRESS: u16 = 0xFF3F;
 
     pub fn new() -> Self {
         Default::default()
@@ -308,6 +352,11 @@ impl Apu {
             Self::CH2_WAVELEN_LOW_ADDRESS => 0xFF,
             Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_2.wavelen_high_ctrl.value(),
 
+            Self::CH4_LEN_TIMER_ADDRESS => self.channel_4.len_timer & 0b11_1111,
+            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.channel_4.vol_env.value(),
+            Self::CH4_FREQ_RAND_ADDRESS => self.channel_4.freq_rand.value(),
+            Self::CH4_CTRL_ADDRESS => (self.channel_4.sound_len_enable as u8) << 6,
+
             Self::CH3_ENABLE_ADDRESS => (self.channel_3.enable as u8) << 7,
             Self::CH3_LEN_TIMER_ADDRESS => 0xFF,
             Self::CH3_OUT_LEVEL_ADDRESS => self.channel_3.out_level,
@@ -320,7 +369,7 @@ impl Apu {
             Self::MASTER_VOL_VIN_PAN_ADDRESS => self.master_vol_vin_pan.value(),
             Self::SOUND_PANNING_ADDRESS => self.sound_panning.value(),
             Self::SOUND_ENABLE_ADDRESS => self.sound_enable.value(),
-            _ => 0x00, //unreachable!("Tried to read invalid address {address:04X} in apu"),
+            _ => unreachable!("Tried to read invalid address {address:04X} in apu"),
         }
     }
 
@@ -346,6 +395,14 @@ impl Apu {
                 self.channel_2.wavelen_high_ctrl.set_value(value)
             }
 
+            Self::CH4_LEN_TIMER_ADDRESS => self.channel_4.len_timer = value & 0b11_1111,
+            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.channel_4.vol_env.set_value(value),
+            Self::CH4_FREQ_RAND_ADDRESS => self.channel_4.freq_rand.set_value(value),
+            Self::CH4_CTRL_ADDRESS => {
+                self.channel_4.trigger = value & 0b1000_0000 != 0;
+                self.channel_4.sound_len_enable = value & 0b100_0000 != 0;
+            }
+
             Self::CH3_ENABLE_ADDRESS => self.channel_3.enable = value & 0b1000_0000 != 0,
             Self::CH3_LEN_TIMER_ADDRESS => self.channel_3.len_timer = value,
             Self::CH3_OUT_LEVEL_ADDRESS => self.channel_3.out_level = (value & 0b11) << 5,
@@ -360,7 +417,7 @@ impl Apu {
             Self::MASTER_VOL_VIN_PAN_ADDRESS => self.master_vol_vin_pan.set_value(value),
             Self::SOUND_PANNING_ADDRESS => self.sound_panning.set_value(value),
             Self::SOUND_ENABLE_ADDRESS => self.sound_enable.all = value & 0b1000_0000 != 0,
-            _ => {} //unreachable!("Tried to write invalid address {address:04X} in apu"),
+            _ => unreachable!("Tried to write invalid address {address:04X} in apu"),
         }
     }
 }
