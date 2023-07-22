@@ -234,7 +234,11 @@ fn main() -> color_eyre::Result<()> {
         .map_or(Ok(None), |bootrom_file| fs::read(bootrom_file).map(Some))?;
     let emulator = Emulator::new(rom, bootrom, arguments.fast_forward, arguments.debug)?;
     if arguments.info {
-        println!("{:?}", emulator.gameboy.rom_header());
+        println!(
+            "{:?}\n{:?}",
+            emulator.gameboy.rom_header(),
+            emulator.gameboy.mapper()
+        );
     }
     emulator.run();
 }

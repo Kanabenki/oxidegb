@@ -91,7 +91,7 @@ trait Mapper {
 
 #[enum_dispatch]
 #[derive(Debug)]
-enum MapperKind {
+pub enum MapperKind {
     RomOnly(RomOnly),
     Mbc1(Mbc1),
 }
@@ -132,6 +132,10 @@ impl Cartridge {
 
     pub const fn header(&self) -> &Header {
         &self.header
+    }
+
+    pub const fn mapper(&self) -> &MapperKind {
+        &self.mapper
     }
 
     pub fn disable_bootrom(&mut self) {

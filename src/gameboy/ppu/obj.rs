@@ -1,25 +1,15 @@
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Palette {
+    #[default]
     ObjP0,
     ObjP1,
 }
 
-impl Default for Palette {
-    fn default() -> Self {
-        Palette::ObjP0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Priority {
+    #[default]
     BehindNonZeroBg,
     AboveBg,
-}
-
-impl Default for Priority {
-    fn default() -> Self {
-        Priority::BehindNonZeroBg
-    }
 }
 
 #[derive(Debug)]

@@ -1,3 +1,4 @@
+// TODO: Refactor API visibility
 mod apu;
 mod cartridge;
 mod cpu;
@@ -54,6 +55,10 @@ impl Gameboy {
 
     pub const fn rom_header(&self) -> &cartridge::Header {
         self.cpu.mmu.cartridge.header()
+    }
+
+    pub const fn mapper(&self) -> &cartridge::MapperKind {
+        self.cpu.mmu.cartridge.mapper()
     }
 
     pub fn set_button(&mut self, button: Button, set: bool) {

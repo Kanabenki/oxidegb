@@ -3,18 +3,13 @@ use std::{
     ops::Index,
 };
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum Color {
+    #[default]
     White = 0,
     LightGray = 1,
     DarkGray = 2,
     Black = 3,
-}
-
-impl Default for Color {
-    fn default() -> Self {
-        Color::White
-    }
 }
 
 impl TryFrom<u8> for Color {
