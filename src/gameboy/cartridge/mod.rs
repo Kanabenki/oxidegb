@@ -1,9 +1,10 @@
 mod mbc1;
+mod mbc2;
 mod rom_only;
 
 use enum_dispatch::enum_dispatch;
 
-use self::{mbc1::Mbc1, rom_only::RomOnly};
+use self::{mbc1::Mbc1, mbc2::Mbc2, rom_only::RomOnly};
 use crate::error::Error;
 
 #[derive(Debug)]
@@ -46,7 +47,7 @@ impl Header {
 
         let (ram_bank_count, ram_size) = match rom_bytes[0x149] {
             0x00 => (0, 0),
-            0x02 => (1, 0x0800),
+            0x02 => (1, 0x2000),
             0x03 => (4, 0x2000 * 4),
             0x04 => (16, 0x2000 * 16),
             0x05 => (8, 0x2000 * 8),
@@ -58,6 +59,8 @@ impl Header {
             0x01 => MapperKind::Mbc1(Mbc1::new(rom_bank_count as u16, false, false)),
             0x02 => MapperKind::Mbc1(Mbc1::new(rom_bank_count as u16, true, false)),
             0x03 => MapperKind::Mbc1(Mbc1::new(rom_bank_count as u16, true, true)),
+            0x05 => MapperKind::Mbc2(Mbc2::new(rom_bank_count as u16, false)),
+            0x06 => MapperKind::Mbc2(Mbc2::new(rom_bank_count as u16, true)),
             id => return Err(Error::UnsupportedMapper(id)),
         };
 
@@ -94,6 +97,7 @@ trait Mapper {
 pub enum MapperKind {
     RomOnly(RomOnly),
     Mbc1(Mbc1),
+    Mbc2(Mbc2),
 }
 
 #[derive(Debug)]
@@ -111,7 +115,12 @@ impl Cartridge {
 
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
         let (header, mapper) = Header::parse(&rom)?;
-        let ram = vec![0; header.ram_size as usize];
+        let ram_size = if let MapperKind::Mbc2(_) = mapper {
+            Mbc2::RAM_SIZE
+        } else {
+            header.ram_size as usize
+        };
+        let ram = vec![0; ram_size];
         let bootrom_enabled = bootrom.is_some();
         if let Some(bootrom) = &bootrom {
             if bootrom.len() != 0x100 {

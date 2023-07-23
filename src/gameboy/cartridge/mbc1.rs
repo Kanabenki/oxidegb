@@ -63,7 +63,7 @@ impl Mbc1 {
             + (self.rom_bank & self.rom_bank_mask) as usize * Self::ROM_BANK_SIZE
     }
 
-    const fn ram_address(&self, address: u16) -> usize {
+    fn ram_address(&self, address: u16) -> usize {
         match self.bank_mode {
             BankMode::Rom => address as usize,
             BankMode::Ram => address as usize + self.ram_bank as usize * Self::RAM_BANK_SIZE,
@@ -110,7 +110,7 @@ impl Mapper for Mbc1 {
     }
 
     fn read_ram(&mut self, ram: &[u8], address: u16) -> u8 {
-        if !self.has_ram || !self.ram_enabled || address as usize >= ram.len() {
+        if !self.has_ram || !self.ram_enabled && (address as usize) < ram.len() {
             0xFF
         } else {
             ram[self.ram_address(address)]
