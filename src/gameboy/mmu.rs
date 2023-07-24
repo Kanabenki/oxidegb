@@ -81,11 +81,16 @@ pub struct Mmu {
 
 impl Mmu {
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
+        let ppu = if bootrom.is_some() {
+            Ppu::new()
+        } else {
+            Ppu::new_post_bootrom()
+        };
         Ok(Self {
             wram: [0; 8192],
             hram: [0; 127],
             apu: Apu::new(),
-            ppu: Ppu::new(),
+            ppu,
             io: Io::new(),
             cartridge: Cartridge::new(rom, bootrom)?,
             dma: Dma::None,

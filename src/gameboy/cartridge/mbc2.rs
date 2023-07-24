@@ -1,4 +1,4 @@
-use super::Mapper;
+use super::MapperOps;
 
 #[derive(Debug)]
 pub struct Mbc2 {
@@ -36,7 +36,7 @@ impl Mbc2 {
     }
 }
 
-impl Mapper for Mbc2 {
+impl MapperOps for Mbc2 {
     fn read_rom(&mut self, rom: &[u8], address: u16) -> u8 {
         match address {
             Self::LOW_BANK_START..=Self::LOW_BANK_END => rom[address as usize],

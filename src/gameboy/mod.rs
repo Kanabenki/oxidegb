@@ -57,7 +57,7 @@ impl Gameboy {
         self.cpu.mmu.cartridge.header()
     }
 
-    pub const fn mapper(&self) -> &cartridge::MapperKind {
+    pub const fn mapper(&self) -> &cartridge::Mapper {
         self.cpu.mmu.cartridge.mapper()
     }
 

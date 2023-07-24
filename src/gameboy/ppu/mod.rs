@@ -145,6 +145,12 @@ impl Ppu {
         }
     }
 
+    pub fn new_post_bootrom() -> Self {
+        let mut ppu = Self::new();
+        ppu.lcdc.lcd_enable = true;
+        ppu
+    }
+
     pub fn tick(&mut self) -> (FlagSet<Interrupt>, DmaRequest) {
         if !self.lcdc.lcd_enable {
             self.line_y = 0;

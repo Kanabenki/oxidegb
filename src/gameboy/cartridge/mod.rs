@@ -24,7 +24,7 @@ pub struct Header {
 }
 
 impl Header {
-    fn parse(rom_bytes: &[u8]) -> Result<(Self, MapperKind), Error> {
+    fn parse(rom_bytes: &[u8]) -> Result<(Self, Mapper), Error> {
         if rom_bytes.len() < 0x014F {
             return Err(Error::InvalidRomHeader("Header is too short"));
         }
@@ -55,12 +55,13 @@ impl Header {
         };
 
         let mapper = match rom_bytes[0x147] {
-            0x00 => MapperKind::RomOnly(RomOnly),
-            0x01 => MapperKind::Mbc1(Mbc1::new(rom_bank_count as u16, false, false)),
-            0x02 => MapperKind::Mbc1(Mbc1::new(rom_bank_count as u16, true, false)),
-            0x03 => MapperKind::Mbc1(Mbc1::new(rom_bank_count as u16, true, true)),
-            0x05 => MapperKind::Mbc2(Mbc2::new(rom_bank_count as u16, false)),
-            0x06 => MapperKind::Mbc2(Mbc2::new(rom_bank_count as u16, true)),
+            0x00 => Mapper::RomOnly(RomOnly),
+            0x01 => Mapper::Mbc1(Mbc1::new(rom_bank_count as u16, false, false)),
+            0x02 => Mapper::Mbc1(Mbc1::new(rom_bank_count as u16, true, false)),
+            0x03 => Mapper::Mbc1(Mbc1::new(rom_bank_count as u16, true, true)),
+
+            0x05 => Mapper::Mbc2(Mbc2::new(rom_bank_count as u16, false)),
+            0x06 => Mapper::Mbc2(Mbc2::new(rom_bank_count as u16, true)),
             id => return Err(Error::UnsupportedMapper(id)),
         };
 
@@ -84,8 +85,8 @@ impl Header {
     }
 }
 
-#[enum_dispatch(MapperKind)]
-trait Mapper {
+#[enum_dispatch(Mapper)]
+trait MapperOps {
     fn read_rom(&mut self, rom: &[u8], address: u16) -> u8;
     fn write_rom(&mut self, rom: &mut [u8], address: u16, value: u8);
     fn read_ram(&mut self, ram: &[u8], address: u16) -> u8;
@@ -94,7 +95,7 @@ trait Mapper {
 
 #[enum_dispatch]
 #[derive(Debug)]
-pub enum MapperKind {
+pub enum Mapper {
     RomOnly(RomOnly),
     Mbc1(Mbc1),
     Mbc2(Mbc2),
@@ -103,7 +104,7 @@ pub enum MapperKind {
 #[derive(Debug)]
 pub struct Cartridge {
     header: Header,
-    mapper: MapperKind,
+    mapper: Mapper,
     bootrom: Option<Vec<u8>>,
     pub bootrom_enabled: bool,
     rom: Vec<u8>,
@@ -115,7 +116,8 @@ impl Cartridge {
 
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
         let (header, mapper) = Header::parse(&rom)?;
-        let ram_size = if let MapperKind::Mbc2(_) = mapper {
+        // Mbc2 has 512 half-bytes of internal RAM that are not reported in the header.
+        let ram_size = if let Mapper::Mbc2(_) = mapper {
             Mbc2::RAM_SIZE
         } else {
             header.ram_size as usize
@@ -143,7 +145,7 @@ impl Cartridge {
         &self.header
     }
 
-    pub const fn mapper(&self) -> &MapperKind {
+    pub const fn mapper(&self) -> &Mapper {
         &self.mapper
     }
 

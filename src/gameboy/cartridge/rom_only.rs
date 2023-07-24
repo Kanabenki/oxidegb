@@ -1,9 +1,9 @@
-use super::Mapper;
+use super::MapperOps;
 
 #[derive(Debug)]
 pub struct RomOnly;
 
-impl Mapper for RomOnly {
+impl MapperOps for RomOnly {
     fn read_rom(&mut self, rom: &[u8], address: u16) -> u8 {
         rom[address as usize]
     }

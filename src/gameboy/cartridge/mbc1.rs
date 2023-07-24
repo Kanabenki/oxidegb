@@ -1,4 +1,4 @@
-use super::Mapper;
+use super::MapperOps;
 
 #[derive(Debug)]
 enum BankMode {
@@ -71,7 +71,7 @@ impl Mbc1 {
     }
 }
 
-impl Mapper for Mbc1 {
+impl MapperOps for Mbc1 {
     fn read_rom(&mut self, rom: &[u8], address: u16) -> u8 {
         match address {
             Self::LOW_BANK_START..=Self::LOW_BANK_END => rom[self.rom_address_low(address)],
