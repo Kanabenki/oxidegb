@@ -1,4 +1,6 @@
-use super::MapperOps;
+use super::{
+    MapperOps, HIGH_BANK_END, HIGH_BANK_START, LOW_BANK_END, LOW_BANK_START, ROM_BANK_SIZE,
+};
 
 #[derive(Debug)]
 pub struct Mbc2 {
@@ -9,12 +11,6 @@ pub struct Mbc2 {
 }
 
 impl Mbc2 {
-    const LOW_BANK_START: u16 = 0x0000;
-    const LOW_BANK_END: u16 = 0x3FFF;
-    const HIGH_BANK_START: u16 = 0x4000;
-    const HIGH_BANK_END: u16 = 0x7FFF;
-
-    const ROM_BANK_SIZE: usize = 0x4000;
     pub const RAM_SIZE: usize = 0x200;
     const RAM_ADDR_MASK: u16 = 0x1FF;
 
@@ -28,7 +24,7 @@ impl Mbc2 {
     }
 
     const fn rom_address_high(&self, address: u16) -> usize {
-        address as usize - Self::ROM_BANK_SIZE + self.rom_bank as usize * Self::ROM_BANK_SIZE
+        address as usize + (self.rom_bank - 1) as usize * ROM_BANK_SIZE
     }
 
     const fn ram_address(&self, address: u16) -> usize {
@@ -39,14 +35,14 @@ impl Mbc2 {
 impl MapperOps for Mbc2 {
     fn read_rom(&mut self, rom: &[u8], address: u16) -> u8 {
         match address {
-            Self::LOW_BANK_START..=Self::LOW_BANK_END => rom[address as usize],
-            Self::HIGH_BANK_START..=Self::HIGH_BANK_END => rom[self.rom_address_high(address)],
+            LOW_BANK_START..=LOW_BANK_END => rom[address as usize],
+            HIGH_BANK_START..=HIGH_BANK_END => rom[self.rom_address_high(address)],
             _ => panic!("Tried to read Mbc2 rom out of range"),
         }
     }
 
     fn write_rom(&mut self, _rom: &mut [u8], address: u16, value: u8) {
-        if let Self::LOW_BANK_START..=Self::LOW_BANK_END = address {
+        if let LOW_BANK_START..=LOW_BANK_END = address {
             if address & 0x100 == 0 {
                 self.ram_enabled = (value & 0xF) == 0b1010;
             } else {

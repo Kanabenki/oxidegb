@@ -1,4 +1,4 @@
-use super::MapperOps;
+use super::{MapperOps, ROM_BANK_SIZE};
 
 #[derive(Debug)]
 enum BankMode {
@@ -24,7 +24,6 @@ impl Mbc1 {
     const HIGH_BANK_START: u16 = 0x4000;
     const HIGH_BANK_END: u16 = 0x7FFF;
 
-    const ROM_BANK_SIZE: usize = 0x4000;
     const RAM_BANK_SIZE: usize = 0x2000;
 
     const WRITE_RAM_ENABLE_START: u16 = 0x0000;
@@ -53,14 +52,13 @@ impl Mbc1 {
         match self.bank_mode {
             BankMode::Rom => address as usize,
             BankMode::Ram => {
-                address as usize + (self.rom_bank & 0b11100000) as usize * Self::ROM_BANK_SIZE
+                address as usize + (self.rom_bank & 0b11100000) as usize * ROM_BANK_SIZE
             }
         }
     }
 
     const fn rom_address_high(&self, address: u16) -> usize {
-        address as usize - Self::ROM_BANK_SIZE
-            + (self.rom_bank & self.rom_bank_mask) as usize * Self::ROM_BANK_SIZE
+        address as usize + ((self.rom_bank & self.rom_bank_mask) - 1) as usize * ROM_BANK_SIZE
     }
 
     fn ram_address(&self, address: u16) -> usize {
@@ -90,8 +88,7 @@ impl MapperOps for Mbc1 {
                 if lower_bits as u16 >= self.rom_bank_count {
                     lower_bits &= (self.rom_bank_count - 1) as u8;
                 }
-                self.rom_bank =
-                    (self.rom_bank & 0b11100000) | if lower_bits != 0 { lower_bits } else { 0b1 };
+                self.rom_bank = (self.rom_bank & 0b11100000) | u8::min(lower_bits, 1);
             }
             Self::WRITE_MODE_BANK_START..=Self::WRITE_MODE_BANK_END => {
                 let bits = value & 0b11;

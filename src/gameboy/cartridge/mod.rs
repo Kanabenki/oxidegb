@@ -1,10 +1,11 @@
 mod mbc1;
 mod mbc2;
+mod mbc3;
 mod rom_only;
 
 use enum_dispatch::enum_dispatch;
 
-use self::{mbc1::Mbc1, mbc2::Mbc2, rom_only::RomOnly};
+use self::{mbc1::Mbc1, mbc2::Mbc2, mbc3::Mbc3, rom_only::RomOnly};
 use crate::error::Error;
 
 #[derive(Debug)]
@@ -62,6 +63,12 @@ impl Header {
 
             0x05 => Mapper::Mbc2(Mbc2::new(rom_bank_count as u16, false)),
             0x06 => Mapper::Mbc2(Mbc2::new(rom_bank_count as u16, true)),
+
+            0x0F => Mapper::Mbc3(Mbc3::new(true, false, true)),
+            0x10 => Mapper::Mbc3(Mbc3::new(true, true, true)),
+            0x11 => Mapper::Mbc3(Mbc3::new(false, false, false)),
+            0x12 => Mapper::Mbc3(Mbc3::new(false, true, false)),
+            0x13 => Mapper::Mbc3(Mbc3::new(false, true, true)),
             id => return Err(Error::UnsupportedMapper(id)),
         };
 
@@ -85,6 +92,7 @@ impl Header {
     }
 }
 
+// TODO Refactor low/high bank separation here
 #[enum_dispatch(Mapper)]
 trait MapperOps {
     fn read_rom(&mut self, rom: &[u8], address: u16) -> u8;
@@ -99,7 +107,17 @@ pub enum Mapper {
     RomOnly(RomOnly),
     Mbc1(Mbc1),
     Mbc2(Mbc2),
+    Mbc3(Mbc3),
 }
+
+const BOOTROM_END: u16 = 0x0100;
+
+const LOW_BANK_START: u16 = 0x0000;
+const LOW_BANK_END: u16 = 0x3FFF;
+const HIGH_BANK_START: u16 = 0x4000;
+const HIGH_BANK_END: u16 = 0x7FFF;
+
+const ROM_BANK_SIZE: usize = 0x4000;
 
 #[derive(Debug)]
 pub struct Cartridge {
@@ -112,8 +130,6 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub const BOOTROM_END: u16 = 0x0100;
-
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
         let (header, mapper) = Header::parse(&rom)?;
         // Mbc2 has 512 half-bytes of internal RAM that are not reported in the header.
@@ -155,7 +171,7 @@ impl Cartridge {
 
     pub fn read_rom(&mut self, address: u16) -> u8 {
         match &self.bootrom {
-            Some(bootrom) if self.bootrom_enabled && address <= Self::BOOTROM_END => {
+            Some(bootrom) if self.bootrom_enabled && address <= BOOTROM_END => {
                 bootrom[address as usize]
             }
             _ => self.mapper.read_rom(&self.rom, address),
@@ -164,7 +180,7 @@ impl Cartridge {
 
     pub fn write_rom(&mut self, address: u16, value: u8) {
         match &mut self.bootrom {
-            Some(bootrom) if self.bootrom_enabled && address <= Self::BOOTROM_END => {
+            Some(bootrom) if self.bootrom_enabled && address <= BOOTROM_END => {
                 bootrom[address as usize] = value
             }
             _ => self.mapper.write_rom(&mut self.rom, address, value),
