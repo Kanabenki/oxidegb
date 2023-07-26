@@ -99,6 +99,7 @@ trait MapperOps {
     fn write_rom(&mut self, rom: &mut [u8], address: u16, value: u8);
     fn read_ram(&mut self, ram: &[u8], address: u16) -> u8;
     fn write_ram(&mut self, rom: &mut [u8], address: u16, value: u8);
+    fn tick(&mut self) {}
 }
 
 #[enum_dispatch]
@@ -118,6 +119,7 @@ const HIGH_BANK_START: u16 = 0x4000;
 const HIGH_BANK_END: u16 = 0x7FFF;
 
 const ROM_BANK_SIZE: usize = 0x4000;
+const RAM_BANK_SIZE: usize = 0x2000;
 
 #[derive(Debug)]
 pub struct Cartridge {

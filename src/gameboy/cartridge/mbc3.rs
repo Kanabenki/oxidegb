@@ -1,5 +1,6 @@
 use super::{
-    MapperOps, HIGH_BANK_END, HIGH_BANK_START, LOW_BANK_END, LOW_BANK_START, ROM_BANK_SIZE,
+    MapperOps, HIGH_BANK_END, HIGH_BANK_START, LOW_BANK_END, LOW_BANK_START, RAM_BANK_SIZE,
+    ROM_BANK_SIZE,
 };
 
 #[derive(Debug)]
@@ -7,6 +8,19 @@ pub struct Mbc3 {
     rom_bank: u8,
     ram_bank_rtc_select: u8,
     ram_rtc_enabled: bool,
+    current_time: RtcRegisters,
+    latched_time: Option<RtcRegisters>,
+    rtc_halt: bool,
+    rtc_carry: bool,
+}
+
+// TODO: Fetch current time and save/restore once save are implemented
+#[derive(Default, Debug, Clone, Copy)]
+struct RtcRegisters {
+    seconds: u8,
+    minutes: u8,
+    hours: u8,
+    days: u16,
 }
 
 impl Mbc3 {
@@ -19,13 +33,22 @@ impl Mbc3 {
     const RTC_LATCH_START: u16 = 0x6000;
     const RTC_LATCH_END: u16 = 0x7FFF;
 
-    const _MAX_RAM_BANK_SELECT: usize = 4;
+    const MAX_RAM_BANK_SELECT: u8 = 3;
+    const RTC_SECONDS_REG: u8 = 0x08;
+    const RTC_MINUTES_REG: u8 = 0x09;
+    const RTC_HOURS_REG: u8 = 0x0A;
+    const RTC_DAY_LOW_REG: u8 = 0x0B;
+    const RTC_DAY_HIGH_REG: u8 = 0x0C;
 
     pub fn new(_has_rtc: bool, _has_ram: bool, _has_battery: bool) -> Self {
         Self {
             rom_bank: 1,
             ram_bank_rtc_select: 0,
             ram_rtc_enabled: false,
+            current_time: RtcRegisters::default(),
+            latched_time: None,
+            rtc_halt: false,
+            rtc_carry: false,
         }
     }
 }
@@ -52,16 +75,59 @@ impl MapperOps for Mbc3 {
             Self::RAM_RTC_SELECT_START..=Self::RAM_RTC_SELECT_END => {
                 self.ram_bank_rtc_select = value & 0x0F;
             }
-            Self::RTC_LATCH_START..=Self::RTC_LATCH_END => todo!(),
+            Self::RTC_LATCH_START..=Self::RTC_LATCH_END => {
+                self.latched_time = (value & 1 != 0).then_some(self.current_time);
+            }
             _ => panic!("Tried to write Mbc3 rom out of range"),
         }
     }
 
-    fn read_ram(&mut self, _ram: &[u8], _address: u16) -> u8 {
-        todo!()
+    fn read_ram(&mut self, ram: &[u8], address: u16) -> u8 {
+        if !self.ram_rtc_enabled {
+            return 0xFF;
+        }
+
+        let time = self.latched_time.unwrap_or(self.current_time);
+        match self.ram_bank_rtc_select {
+            0..=Self::MAX_RAM_BANK_SELECT => {
+                ram[address as usize + self.ram_bank_rtc_select as usize * RAM_BANK_SIZE]
+            }
+            Self::RTC_SECONDS_REG => time.seconds,
+            Self::RTC_MINUTES_REG => time.minutes,
+            Self::RTC_HOURS_REG => time.hours,
+            Self::RTC_DAY_LOW_REG => time.days as u8,
+            Self::RTC_DAY_HIGH_REG => {
+                (time.days >> 8) as u8 & 0b1
+                    | (self.rtc_halt as u8) << 6
+                    | (self.rtc_carry as u8) << 7
+            }
+            _ => 0xFF,
+        }
     }
 
-    fn write_ram(&mut self, _rom: &mut [u8], _address: u16, _value: u8) {
-        todo!()
+    fn write_ram(&mut self, ram: &mut [u8], address: u16, value: u8) {
+        if !self.ram_rtc_enabled {
+            return;
+        }
+
+        match self.ram_bank_rtc_select {
+            0..=Self::MAX_RAM_BANK_SELECT => {
+                ram[address as usize + self.ram_bank_rtc_select as usize * RAM_BANK_SIZE] = value
+            }
+            Self::RTC_SECONDS_REG => self.current_time.seconds = value,
+            Self::RTC_MINUTES_REG => self.current_time.minutes = value,
+            Self::RTC_HOURS_REG => self.current_time.hours = value,
+            Self::RTC_DAY_LOW_REG => self.current_time.days &= 0xFF00 | value as u16,
+            Self::RTC_DAY_HIGH_REG => {
+                self.current_time.days &= 0x00FF | ((value as u16 & 1) << 8);
+                self.rtc_carry = value >> 7 != 0;
+                self.rtc_halt = (value >> 6) & 1 != 0;
+            }
+            _ => {}
+        }
+    }
+
+    fn tick(&mut self) {
+        todo!();
     }
 }

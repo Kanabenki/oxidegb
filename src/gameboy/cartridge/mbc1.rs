@@ -1,4 +1,4 @@
-use super::{MapperOps, ROM_BANK_SIZE};
+use super::{MapperOps, RAM_BANK_SIZE, ROM_BANK_SIZE};
 
 #[derive(Debug)]
 enum BankMode {
@@ -23,8 +23,6 @@ impl Mbc1 {
     const LOW_BANK_END: u16 = 0x3FFF;
     const HIGH_BANK_START: u16 = 0x4000;
     const HIGH_BANK_END: u16 = 0x7FFF;
-
-    const RAM_BANK_SIZE: usize = 0x2000;
 
     const WRITE_RAM_ENABLE_START: u16 = 0x0000;
     const WRITE_RAM_ENABLE_END: u16 = 0x1FFF;
@@ -64,7 +62,7 @@ impl Mbc1 {
     fn ram_address(&self, address: u16) -> usize {
         match self.bank_mode {
             BankMode::Rom => address as usize,
-            BankMode::Ram => address as usize + self.ram_bank as usize * Self::RAM_BANK_SIZE,
+            BankMode::Ram => address as usize + self.ram_bank as usize * RAM_BANK_SIZE,
         }
     }
 }
