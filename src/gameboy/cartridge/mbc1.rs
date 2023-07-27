@@ -56,7 +56,7 @@ impl Mbc1 {
     }
 
     const fn rom_address_high(&self, address: u16) -> usize {
-        address as usize + ((self.rom_bank & self.rom_bank_mask) - 1) as usize * ROM_BANK_SIZE
+        address as usize - ROM_BANK_SIZE + self.rom_bank as usize * ROM_BANK_SIZE
     }
 
     fn ram_address(&self, address: u16) -> usize {
@@ -84,9 +84,9 @@ impl MapperOps for Mbc1 {
             Self::WRITE_ROM_BANK_START..=Self::WRITE_ROM_BANK_END => {
                 let mut lower_bits = value & 0b11111;
                 if lower_bits as u16 >= self.rom_bank_count {
-                    lower_bits &= (self.rom_bank_count - 1) as u8;
+                    lower_bits &= self.rom_bank_mask;
                 }
-                self.rom_bank = (self.rom_bank & 0b11100000) | u8::min(lower_bits, 1);
+                self.rom_bank = (self.rom_bank & 0b11100000) | u8::max(lower_bits, 1);
             }
             Self::WRITE_MODE_BANK_START..=Self::WRITE_MODE_BANK_END => {
                 let bits = value & 0b11;

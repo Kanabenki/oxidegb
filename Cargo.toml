@@ -6,7 +6,7 @@ edition = "2021"
 rust-version = "1.66"
 
 [dependencies]
-pixels = "0.10.0"
+pixels = "0.13.0"
 winit = "0.27.5"
 flagset = "0.4.3"
 enum_dispatch = "0.3.8"

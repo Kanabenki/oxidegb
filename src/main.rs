@@ -117,7 +117,7 @@ impl Emulator {
             match event {
                 Event::RedrawRequested(_) => {
                     let screen = self.gameboy.screen();
-                    for (i, pixel) in self.pixels.get_frame_mut().chunks_exact_mut(4).enumerate() {
+                    for (i, pixel) in self.pixels.frame_mut().chunks_exact_mut(4).enumerate() {
                         let color: [u8; 4] = screen[i].into();
                         pixel.copy_from_slice(&color);
                     }
@@ -154,7 +154,7 @@ impl Emulator {
                     window_id,
                     event: WindowEvent::Resized(size),
                 } if window_id == self.window.id() => {
-                    self.pixels.resize_surface(size.width, size.height)
+                    self.pixels.resize_surface(size.width, size.height).unwrap();
                 }
                 Event::WindowEvent {
                     window_id,
