@@ -27,7 +27,7 @@ pub struct Gameboy {
 }
 
 impl Gameboy {
-    pub const CYCLES_PER_SECOND: u64 = 4194304;
+    pub const CYCLES_PER_SECOND: u64 = 4_194_304;
 
     pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>, debug: bool) -> Result<Self, Error> {
         let cpu = Cpu::new(rom, bootrom)?;

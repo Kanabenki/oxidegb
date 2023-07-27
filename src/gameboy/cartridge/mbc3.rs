@@ -70,7 +70,7 @@ impl MapperOps for Mbc3 {
                 self.ram_rtc_enabled = value & 0x0F == 0x0A
             }
             Self::ROM_BANK_SELECT_START..=Self::ROM_BANK_SELECT_END => {
-                self.rom_bank = u8::max(value & 0b01111111, 1);
+                self.rom_bank = u8::max(value & 0b0111_1111, 1);
             }
             Self::RAM_RTC_SELECT_START..=Self::RAM_RTC_SELECT_END => {
                 self.ram_bank_rtc_select = value & 0x0F;

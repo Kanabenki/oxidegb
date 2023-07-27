@@ -368,10 +368,9 @@ impl Ppu {
             Self::WINDOW_Y => self.window_y = value,
             Self::WINDOW_X => self.window_x = value,
             Self::UNUSED_START..=Self::UNUSED_END | Self::CGB_VRAM_BANK_SELECT => {}
-            invalid_address => panic!(
-                "Tried to write ppu register at invalid address 0x{:X}",
-                invalid_address
-            ),
+            invalid_address => {
+                panic!("Tried to write ppu register at invalid address 0x{invalid_address:X}")
+            }
         }
     }
 }

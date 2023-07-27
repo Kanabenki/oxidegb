@@ -36,7 +36,7 @@ impl Action {
     fn pending_obj(&self) -> bool {
         matches!(
             self,
-            Action::ObjReadAttr { .. } | Action::ObjReadDataL { .. } | Action::ObjReadDataH { .. }
+            Self::ObjReadAttr { .. } | Self::ObjReadDataL { .. } | Self::ObjReadDataH { .. }
         )
     }
 }

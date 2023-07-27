@@ -7,8 +7,8 @@ pub enum TileMapRange {
 impl TileMapRange {
     pub const fn base_address(&self) -> u16 {
         match self {
-            TileMapRange::Low => 0x1800,
-            TileMapRange::High => 0x1C00,
+            Self::Low => 0x1800,
+            Self::High => 0x1C00,
         }
     }
 }
@@ -22,8 +22,8 @@ pub enum TileDataAddressing {
 impl TileDataAddressing {
     pub const fn address_from_index_bg(&self, index: u8, line: u16) -> u16 {
         match self {
-            TileDataAddressing::Unsigned => (index as u16 * 16) + (line % 8) * 2,
-            TileDataAddressing::Signed => {
+            Self::Unsigned => (index as u16 * 16) + (line % 8) * 2,
+            Self::Signed => {
                 0x1000u16.wrapping_add((index as i8 as i16 * 16) as u16) + (line % 8) * 2
             }
         }
@@ -31,8 +31,8 @@ impl TileDataAddressing {
 
     pub const fn address_from_index_obj(&self, index: u8, line: u16, size: SpriteSize) -> u16 {
         match self {
-            TileDataAddressing::Unsigned => (index as u16 * 16) + (line % size.height() as u16) * 2,
-            TileDataAddressing::Signed => {
+            Self::Unsigned => (index as u16 * 16) + (line % size.height() as u16) * 2,
+            Self::Signed => {
                 0x1000u16.wrapping_add((index as i8 as i16 * 16) as u16)
                     + (line % size.height() as u16) * 2
             }
@@ -49,8 +49,8 @@ pub enum SpriteSize {
 impl SpriteSize {
     pub const fn height(&self) -> u8 {
         match self {
-            SpriteSize::S8x8 => 8,
-            SpriteSize::S8x16 => 16,
+            Self::S8x8 => 8,
+            Self::S8x16 => 16,
         }
     }
 }

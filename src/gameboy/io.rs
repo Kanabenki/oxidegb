@@ -16,17 +16,17 @@ pub enum Button {
 impl Button {
     const fn bit(&self) -> u8 {
         match self {
-            Button::Right | Button::A => 0b0001,
-            Button::Left | Button::B => 0b0010,
-            Button::Up | Button::Select => 0b0100,
-            Button::Down | Button::Start => 0b1000,
+            Self::Right | Self::A => 0b0001,
+            Self::Left | Self::B => 0b0010,
+            Self::Up | Self::Select => 0b0100,
+            Self::Down | Self::Start => 0b1000,
         }
     }
 
     const fn line(&self) -> InputLine {
         match self {
-            Button::Down | Button::Up | Button::Left | Button::Right => InputLine::Directions,
-            Button::Start | Button::Select | Button::A | Button::B => InputLine::Buttons,
+            Self::Down | Self::Up | Self::Left | Self::Right => InputLine::Directions,
+            Self::Start | Self::Select | Self::A | Self::B => InputLine::Buttons,
         }
     }
 }
@@ -112,10 +112,10 @@ enum InputClock {
 impl InputClock {
     const fn bit(&self) -> u16 {
         match self {
-            InputClock::CpuDiv1024 => 1 << 10,
-            InputClock::CpuDiv16 => 1 << 4,
-            InputClock::CpuDiv64 => 1 << 6,
-            InputClock::CpuDiv256 => 1 << 8,
+            Self::CpuDiv1024 => 1 << 10,
+            Self::CpuDiv16 => 1 << 4,
+            Self::CpuDiv64 => 1 << 6,
+            Self::CpuDiv256 => 1 << 8,
         }
     }
 }
@@ -277,10 +277,9 @@ impl Io {
             SERIAL_CONTROL => 0xFF,
             UNUSED => 0xFF,
             TIMER_START..=TIMER_END => self.timer.read(address),
-            invalid_address => panic!(
-                "Tried to read at invalid io register address 0x{:X}",
-                invalid_address
-            ),
+            invalid_address => {
+                panic!("Tried to read at invalid io register address 0x{invalid_address:X}")
+            }
         }
     }
 
@@ -292,10 +291,9 @@ impl Io {
             SERIAL_CONTROL => {}
             UNUSED => {}
             TIMER_START..=TIMER_END => self.timer.write(address, value),
-            invalid_address => panic!(
-                "Tried to write at invalid io register address 0x{:X}",
-                invalid_address
-            ),
+            invalid_address => {
+                panic!("Tried to write at invalid io register address 0x{invalid_address:X}")
+            }
         }
     }
 }

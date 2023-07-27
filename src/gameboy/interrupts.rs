@@ -19,11 +19,11 @@ impl Interrupt {
 
     pub const fn address(&self) -> u16 {
         match self {
-            Interrupt::VBlank => Self::VBLANK_ADDRESS,
-            Interrupt::LcdStat => Self::LCD_STAT_ADDRESS,
-            Interrupt::Timer => Self::TIMER_ADDRESS,
-            Interrupt::Serial => Self::SERIAL_ADDRESS,
-            Interrupt::Joypad => Self::JOYPAD_ADDRESS,
+            Self::VBlank => Self::VBLANK_ADDRESS,
+            Self::LcdStat => Self::LCD_STAT_ADDRESS,
+            Self::Timer => Self::TIMER_ADDRESS,
+            Self::Serial => Self::SERIAL_ADDRESS,
+            Self::Joypad => Self::JOYPAD_ADDRESS,
         }
     }
 }

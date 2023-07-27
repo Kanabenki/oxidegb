@@ -10,11 +10,11 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::InvalidBootRom => write!(f, "BootRom is invalid"),
-            Error::InvalidRomHeader(reason) => {
-                write!(f, "Rom header cannot be parsed ({})", reason)
+            Self::InvalidBootRom => write!(f, "BootRom is invalid"),
+            Self::InvalidRomHeader(reason) => {
+                write!(f, "Rom header cannot be parsed ({reason})")
             }
-            Error::UnsupportedMapper(id) => write!(f, "Unsupported rom mapper id {id}"),
+            Self::UnsupportedMapper(id) => write!(f, "Unsupported rom mapper id {id}"),
         }
     }
 }

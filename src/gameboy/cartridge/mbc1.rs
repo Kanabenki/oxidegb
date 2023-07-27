@@ -50,7 +50,7 @@ impl Mbc1 {
         match self.bank_mode {
             BankMode::Rom => address as usize,
             BankMode::Ram => {
-                address as usize + (self.rom_bank & 0b11100000) as usize * ROM_BANK_SIZE
+                address as usize + (self.rom_bank & 0b1110_0000) as usize * ROM_BANK_SIZE
             }
         }
     }
@@ -86,7 +86,7 @@ impl MapperOps for Mbc1 {
                 if lower_bits as u16 >= self.rom_bank_count {
                     lower_bits &= self.rom_bank_mask;
                 }
-                self.rom_bank = (self.rom_bank & 0b11100000) | u8::max(lower_bits, 1);
+                self.rom_bank = (self.rom_bank & 0b1110_0000) | u8::max(lower_bits, 1);
             }
             Self::WRITE_MODE_BANK_START..=Self::WRITE_MODE_BANK_END => {
                 let bits = value & 0b11;

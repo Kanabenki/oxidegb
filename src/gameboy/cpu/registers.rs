@@ -28,10 +28,10 @@ impl DoubleRegisterIndex {
 
 flags! {
     enum Flag: u8 {
-        Z = 0b10000000,
-        N = 0b01000000,
-        H = 0b00100000,
-        C = 0b00010000
+        Z = 0b1000_0000,
+        N = 0b0100_0000,
+        H = 0b0010_0000,
+        C = 0b0001_0000
     }
 }
 
@@ -152,9 +152,7 @@ pub struct Registers {
 
 impl Registers {
     pub fn new() -> Self {
-        Self {
-            ..Default::default()
-        }
+        Default::default()
     }
 
     pub fn new_post_bootrom() -> Self {

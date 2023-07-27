@@ -512,7 +512,7 @@ impl Cpu {
 
     fn rst(&mut self, opcode: u8) {
         self.push_stack(self.registers.pc);
-        self.set_pc_tick((opcode & 0b00111000) as u16);
+        self.set_pc_tick((opcode & 0b0011_1000) as u16);
     }
 
     // Flags operations.
