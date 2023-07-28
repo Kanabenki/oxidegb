@@ -1,3 +1,5 @@
+use crate::gameboy::Gameboy;
+
 use super::{
     MapperOps, HIGH_BANK_END, HIGH_BANK_START, LOW_BANK_END, LOW_BANK_START, RAM_BANK_SIZE,
     ROM_BANK_SIZE,
@@ -12,6 +14,7 @@ pub struct Mbc3 {
     latched_time: Option<RtcRegisters>,
     rtc_halt: bool,
     rtc_carry: bool,
+    cycles: usize,
 }
 
 // TODO: Fetch current time and save/restore once save are implemented
@@ -49,6 +52,7 @@ impl Mbc3 {
             latched_time: None,
             rtc_halt: false,
             rtc_carry: false,
+            cycles: 0,
         }
     }
 }
@@ -128,6 +132,30 @@ impl MapperOps for Mbc3 {
     }
 
     fn tick(&mut self) {
-        todo!();
+        if self.rtc_halt {
+            self.cycles = 0;
+        } else {
+            self.cycles += 1;
+            if self.cycles == Gameboy::CYCLES_PER_SECOND as usize / 4 {
+                self.cycles = 0;
+                self.current_time.seconds += 1;
+                if self.current_time.seconds == 60 {
+                    self.current_time.seconds = 0;
+                    self.current_time.minutes += 1;
+                    if self.current_time.minutes == 60 {
+                        self.current_time.minutes = 0;
+                        self.current_time.hours += 1;
+                        if self.current_time.hours == 24 {
+                            self.current_time.hours = 0;
+                            self.current_time.days += 1;
+                            if self.current_time.days == 0b1_1111_1111 {
+                                self.current_time.days = 0;
+                                self.rtc_carry = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
