@@ -29,8 +29,13 @@ pub struct Gameboy {
 impl Gameboy {
     pub const CYCLES_PER_SECOND: u64 = 4_194_304;
 
-    pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>, debug: bool) -> Result<Self, Error> {
-        let cpu = Cpu::new(rom, bootrom)?;
+    pub fn new(
+        rom: Vec<u8>,
+        bootrom: Option<Vec<u8>>,
+        save_data: Option<Vec<u8>>,
+        debug: bool,
+    ) -> Result<Self, Error> {
+        let cpu = Cpu::new(rom, bootrom, save_data)?;
         let debug_status = DebugStatus {
             breakpoints: vec![],
             should_break: debug,
@@ -51,6 +56,10 @@ impl Gameboy {
 
     pub fn samples(&mut self) -> ([i16; 6], [i16; 6], usize) {
         self.cpu.mmu.apu.samples()
+    }
+
+    pub fn save_data(&self) -> Option<&[u8]> {
+        self.cpu.mmu.cartridge.save_data()
     }
 
     pub const fn rom_header(&self) -> &cartridge::Header {

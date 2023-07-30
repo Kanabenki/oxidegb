@@ -7,6 +7,9 @@ use super::{
 
 #[derive(Debug)]
 pub struct Mbc3 {
+    has_rtc: bool,
+    has_ram: bool,
+    has_battery: bool,
     rom_bank: u8,
     ram_bank_rtc_select: u8,
     ram_rtc_enabled: bool,
@@ -43,8 +46,11 @@ impl Mbc3 {
     const RTC_DAY_LOW_REG: u8 = 0x0B;
     const RTC_DAY_HIGH_REG: u8 = 0x0C;
 
-    pub fn new(_has_rtc: bool, _has_ram: bool, _has_battery: bool) -> Self {
+    pub fn new(has_rtc: bool, has_ram: bool, has_battery: bool) -> Self {
         Self {
+            has_rtc,
+            has_ram,
+            has_battery,
             rom_bank: 1,
             ram_bank_rtc_select: 0,
             ram_rtc_enabled: false,
@@ -93,14 +99,14 @@ impl MapperOps for Mbc3 {
 
         let time = self.latched_time.unwrap_or(self.current_time);
         match self.ram_bank_rtc_select {
-            0..=Self::MAX_RAM_BANK_SELECT => {
+            0..=Self::MAX_RAM_BANK_SELECT if self.has_ram => {
                 ram[address as usize + self.ram_bank_rtc_select as usize * RAM_BANK_SIZE]
             }
-            Self::RTC_SECONDS_REG => time.seconds,
-            Self::RTC_MINUTES_REG => time.minutes,
-            Self::RTC_HOURS_REG => time.hours,
-            Self::RTC_DAY_LOW_REG => time.days as u8,
-            Self::RTC_DAY_HIGH_REG => {
+            Self::RTC_SECONDS_REG if self.has_rtc => time.seconds,
+            Self::RTC_MINUTES_REG if self.has_rtc => time.minutes,
+            Self::RTC_HOURS_REG if self.has_rtc => time.hours,
+            Self::RTC_DAY_LOW_REG if self.has_rtc => time.days as u8,
+            Self::RTC_DAY_HIGH_REG if self.has_rtc => {
                 (time.days >> 8) as u8 & 0b1
                     | (self.rtc_halt as u8) << 6
                     | (self.rtc_carry as u8) << 7
@@ -132,7 +138,7 @@ impl MapperOps for Mbc3 {
     }
 
     fn tick(&mut self) {
-        if self.rtc_halt {
+        if !self.has_rtc || self.rtc_halt {
             self.cycles = 0;
         } else {
             self.cycles += 1;
@@ -157,5 +163,9 @@ impl MapperOps for Mbc3 {
                 }
             }
         }
+    }
+
+    fn can_save(&self) -> bool {
+        self.has_battery
     }
 }

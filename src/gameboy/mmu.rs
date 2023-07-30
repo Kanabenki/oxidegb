@@ -80,7 +80,11 @@ pub struct Mmu {
 }
 
 impl Mmu {
-    pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
+    pub fn new(
+        rom: Vec<u8>,
+        bootrom: Option<Vec<u8>>,
+        save: Option<Vec<u8>>,
+    ) -> Result<Self, Error> {
         let ppu = if bootrom.is_some() {
             Ppu::new()
         } else {
@@ -92,7 +96,7 @@ impl Mmu {
             apu: Apu::new(),
             ppu,
             io: Io::new(),
-            cartridge: Cartridge::new(rom, bootrom)?,
+            cartridge: Cartridge::new(rom, bootrom, save)?,
             dma: Dma::None,
             interrupt_flags: FlagSet::default(),
             interrupt_enable: FlagSet::default(),
@@ -102,6 +106,7 @@ impl Mmu {
 
     pub fn tick(&mut self) {
         self.apu.tick();
+        self.cartridge.tick();
         let io_interrupts = self.io.tick();
         let (ppu_interrupts, dma) = self.ppu.tick();
         self.interrupt_flags |= io_interrupts | ppu_interrupts;

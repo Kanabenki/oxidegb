@@ -100,6 +100,9 @@ trait MapperOps {
     fn read_ram(&mut self, ram: &[u8], address: u16) -> u8;
     fn write_ram(&mut self, rom: &mut [u8], address: u16, value: u8);
     fn tick(&mut self) {}
+    fn can_save(&self) -> bool {
+        false
+    }
 }
 
 #[enum_dispatch]
@@ -132,7 +135,11 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
+    pub fn new(
+        rom: Vec<u8>,
+        bootrom: Option<Vec<u8>>,
+        save: Option<Vec<u8>>,
+    ) -> Result<Self, Error> {
         let (header, mapper) = Header::parse(&rom)?;
         // Mbc2 has 512 half-bytes of internal RAM that are not reported in the header.
         let ram_size = if let Mapper::Mbc2(_) = mapper {
@@ -140,7 +147,14 @@ impl Cartridge {
         } else {
             header.ram_size as usize
         };
-        let ram = vec![0; ram_size];
+        let ram = if let Some(save) = save {
+            if save.len() != ram_size {
+                return Err(Error::InvalidSave);
+            }
+            save
+        } else {
+            vec![0; ram_size]
+        };
         let bootrom_enabled = bootrom.is_some();
         if let Some(bootrom) = &bootrom {
             if bootrom.len() != 0x100 {
@@ -157,6 +171,10 @@ impl Cartridge {
             rom,
             ram,
         })
+    }
+
+    pub fn tick(&mut self) {
+        self.mapper.tick();
     }
 
     pub const fn header(&self) -> &Header {
@@ -195,5 +213,13 @@ impl Cartridge {
 
     pub fn write_ram(&mut self, address: u16, value: u8) {
         self.mapper.write_ram(&mut self.ram, address, value);
+    }
+
+    pub fn save_data(&self) -> Option<&[u8]> {
+        if self.mapper.can_save() {
+            Some(&self.ram)
+        } else {
+            None
+        }
     }
 }

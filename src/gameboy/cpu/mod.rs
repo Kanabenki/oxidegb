@@ -38,7 +38,11 @@ impl MemoryOps for Cpu {
 }
 
 impl Cpu {
-    pub fn new(rom: Vec<u8>, bootrom: Option<Vec<u8>>) -> Result<Self, Error> {
+    pub fn new(
+        rom: Vec<u8>,
+        bootrom: Option<Vec<u8>>,
+        save: Option<Vec<u8>>,
+    ) -> Result<Self, Error> {
         let registers = if bootrom.is_some() {
             Registers::new()
         } else {
@@ -47,7 +51,7 @@ impl Cpu {
         Ok(Self {
             registers,
             enable_ime: false,
-            mmu: Mmu::new(rom, bootrom)?,
+            mmu: Mmu::new(rom, bootrom, save)?,
             cycles: 0,
             execution_state: ExecutionState::Continue,
         })

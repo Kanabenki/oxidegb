@@ -4,7 +4,7 @@ use super::{
 
 #[derive(Debug)]
 pub struct Mbc2 {
-    _has_battery: bool,
+    has_battery: bool,
     ram_enabled: bool,
     _rom_bank_count: u16,
     rom_bank: u8,
@@ -16,7 +16,7 @@ impl Mbc2 {
 
     pub const fn new(rom_bank_count: u16, has_battery: bool) -> Self {
         Self {
-            _has_battery: has_battery,
+            has_battery,
             ram_enabled: false,
             _rom_bank_count: rom_bank_count,
             rom_bank: 1,
@@ -63,5 +63,9 @@ impl MapperOps for Mbc2 {
         if self.ram_enabled {
             ram[self.ram_address(address)] = value | 0xF0;
         }
+    }
+
+    fn can_save(&self) -> bool {
+        self.has_battery
     }
 }

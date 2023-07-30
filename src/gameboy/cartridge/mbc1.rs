@@ -9,7 +9,7 @@ enum BankMode {
 #[derive(Debug)]
 pub struct Mbc1 {
     has_ram: bool,
-    _has_battery: bool,
+    has_battery: bool,
     ram_enabled: bool,
     rom_bank_count: u16,
     rom_bank_mask: u8,
@@ -36,7 +36,7 @@ impl Mbc1 {
     pub const fn new(rom_bank_count: u16, has_ram: bool, has_battery: bool) -> Self {
         Self {
             has_ram,
-            _has_battery: has_battery,
+            has_battery,
             ram_enabled: false,
             rom_bank_count,
             rom_bank: 1,
@@ -116,5 +116,9 @@ impl MapperOps for Mbc1 {
         if self.has_ram && self.ram_enabled && (address as usize) < ram.len() {
             ram[self.ram_address(address)] = value;
         }
+    }
+
+    fn can_save(&self) -> bool {
+        self.has_battery
     }
 }

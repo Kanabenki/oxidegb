@@ -1,4 +1,8 @@
-use std::{fs, path::PathBuf};
+use std::{
+    fs::{self, File},
+    io::{Read, Seek, SeekFrom, Write},
+    path::PathBuf,
+};
 
 use blip_buf::BlipBuf;
 use clap::Parser;
@@ -26,6 +30,7 @@ struct Emulator {
     sound_prod: HeapProducer<i16>,
     _sound_stream: Stream,
     gameboy: Gameboy,
+    save_file: File,
     delta: u64,
 }
 
@@ -33,6 +38,7 @@ impl Emulator {
     fn new(
         rom: Vec<u8>,
         bootrom: Option<Vec<u8>>,
+        mut save_file: File,
         fast_forward: bool,
         debug: bool,
     ) -> color_eyre::Result<Self> {
@@ -51,7 +57,14 @@ impl Emulator {
                 .build()?
         };
 
-        let gameboy = Gameboy::new(rom, bootrom, debug)?;
+        let mut save_data = vec![];
+        save_file.read_to_end(&mut save_data)?;
+        let save_data = if !save_data.is_empty() {
+            Some(save_data)
+        } else {
+            None
+        };
+        let gameboy = Gameboy::new(rom, bootrom, save_data, debug)?;
         let event_loop = Some(event_loop);
 
         let sample_rate_out = 44100;
@@ -105,6 +118,7 @@ impl Emulator {
             _sound_stream: sound_stream,
             resampling_bufs,
             gameboy,
+            save_file,
             delta: 0,
         })
     }
@@ -159,7 +173,16 @@ impl Emulator {
                 Event::WindowEvent {
                     window_id,
                     event: WindowEvent::CloseRequested,
-                } if window_id == self.window.id() => *control_flow = ControlFlow::Exit,
+                } if window_id == self.window.id() => {
+                    if let Some(save_data) = self.gameboy.save_data() {
+                        let len = save_data.len();
+                        // TODO log any error
+                        self.save_file.seek(SeekFrom::Start(0)).unwrap();
+                        self.save_file.write_all(save_data).unwrap();
+                        self.save_file.set_len(len as u64).unwrap();
+                    }
+                    *control_flow = ControlFlow::Exit;
+                }
                 Event::MainEventsCleared => {
                     let refresh_rate = self
                         .window
@@ -208,18 +231,21 @@ impl Emulator {
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Arguments {
-    /// The rom file to load
+    /// The rom file to load.
     file: PathBuf,
-    /// The bootrom file to load
+    /// The save file path to use. By default, oxidegb will load and save from a sav file with the same base name as the rom file.
+    #[arg(short, long)]
+    save_file: Option<PathBuf>,
+    /// The bootrom file to load.
     #[arg(short, long)]
     bootrom_file: Option<PathBuf>,
-    /// Display rom header info
+    /// Display rom header info.
     #[arg(short, long)]
     info: bool,
-    /// Enable the debugger
+    /// Enable the debugger.
     #[arg(short, long)]
     debug: bool,
-    /// Do not limit fps
+    /// Do not limit fps.
     #[arg(short, long)]
     fast_forward: bool,
 }
@@ -228,11 +254,18 @@ fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
 
     let arguments = Arguments::parse();
-    let rom = fs::read(arguments.file)?;
+    let rom = fs::read(&arguments.file)?;
     let bootrom = arguments
         .bootrom_file
         .map_or(Ok(None), |bootrom_file| fs::read(bootrom_file).map(Some))?;
-    let emulator = Emulator::new(rom, bootrom, arguments.fast_forward, arguments.debug)?;
+    let mut save_open_options = fs::OpenOptions::new();
+    save_open_options.read(true).write(true).create(true);
+    let save = arguments.save_file.map_or_else(
+        || save_open_options.open(arguments.file.with_extension("sav")),
+        |save_file| save_open_options.open(save_file),
+    )?;
+
+    let emulator = Emulator::new(rom, bootrom, save, arguments.fast_forward, arguments.debug)?;
     if arguments.info {
         println!(
             "{:?}\n{:?}",
