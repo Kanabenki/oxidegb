@@ -103,6 +103,7 @@ impl Emulator {
                 sound_cons.pop_slice(data);
             },
             move |error| eprintln!("Error occurred in audio stream: {}", Report::from(error)),
+            None,
         )?;
 
         sound_stream.play()?;
