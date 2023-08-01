@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use super::MapperOps;
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RomOnly;
 
 impl MapperOps for RomOnly {

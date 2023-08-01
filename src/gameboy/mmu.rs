@@ -1,4 +1,6 @@
 use flagset::FlagSet;
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 use super::{
     apu::Apu, cartridge::Cartridge, interrupts::Interrupt, io::Io, ppu::DmaRequest, ppu::Ppu,
@@ -37,7 +39,7 @@ mod map {
     pub const INTERRUPT_ENABLE: u16 = 0xFFFF;
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 enum Dma {
     None,
     InProgress {
@@ -65,9 +67,11 @@ pub trait MemoryOps {
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Mmu {
+    #[serde(with = "BigArray")]
     wram: [u8; 8192],
+    #[serde(with = "BigArray")]
     hram: [u8; 127],
     pub(super) apu: Apu,
     pub(super) ppu: Ppu,

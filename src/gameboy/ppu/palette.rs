@@ -3,7 +3,9 @@ use std::{
     ops::Index,
 };
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum Color {
     #[default]
     White = 0,
@@ -26,7 +28,7 @@ impl TryFrom<u8> for Color {
     }
 }
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct Palette([Color; 4]);
 
 impl Index<u8> for Palette {

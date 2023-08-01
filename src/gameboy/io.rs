@@ -1,4 +1,5 @@
 use flagset::FlagSet;
+use serde::{Deserialize, Serialize};
 
 use super::interrupts::Interrupt;
 
@@ -31,7 +32,7 @@ impl Button {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 enum InputLine {
     Directions = 0b0001_0000,
     Buttons = 0b0010_0000,
@@ -39,7 +40,7 @@ enum InputLine {
     None = 0b0000_0000,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Buttons {
     directions: u8,
     buttons: u8,
@@ -101,7 +102,7 @@ impl Buttons {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 enum InputClock {
     CpuDiv1024 = 0b00,
     CpuDiv16 = 0b01,
@@ -120,13 +121,13 @@ impl InputClock {
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 enum TimerState {
     Normal,
     Overflowed,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Timer {
     divider: u16,
     counter: u8,
@@ -242,7 +243,7 @@ mod map {
     pub const TIMER_END: u16 = 0xFF07;
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Io {
     pub(super) buttons: Buttons,
     timer: Timer,

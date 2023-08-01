@@ -7,6 +7,8 @@ mod pixel_transfer;
 use std::convert::TryInto;
 
 use flagset::FlagSet;
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 use self::{
     lcd_control::LcdControl,
@@ -16,13 +18,13 @@ use self::{
 };
 use super::interrupts::Interrupt;
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum DmaRequest {
     None,
     Start(u8),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Color([u8; 4]);
 
 impl From<palette::Color> for Color {
@@ -48,17 +50,20 @@ impl From<[u8; 4]> for Color {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Palettes {
     pub bg: Palette,
     pub obj_0: Palette,
     pub obj_1: Palette,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Ppu {
+    #[serde(with = "BigArray")]
     screen: [Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize],
+    #[serde(with = "BigArray")]
     vram: [u8; Self::VRAM_SIZE],
+    #[serde(with = "BigArray")]
     oam: [u8; Self::OAM_SIZE],
     bg_fifo: PixelFifo<BgPixel>,
     obj_fifo: PixelFifo<ObjPixel>,

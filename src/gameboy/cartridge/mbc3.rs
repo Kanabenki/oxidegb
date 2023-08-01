@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::gameboy::Gameboy;
 
 use super::{
@@ -5,7 +7,7 @@ use super::{
     ROM_BANK_SIZE,
 };
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Mbc3 {
     has_rtc: bool,
     has_ram: bool,
@@ -21,7 +23,7 @@ pub struct Mbc3 {
 }
 
 // TODO: Fetch current time and save/restore once save are implemented
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, Copy)]
 struct RtcRegisters {
     seconds: u8,
     minutes: u8,

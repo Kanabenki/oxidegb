@@ -3,11 +3,13 @@ mod registers;
 
 use std::primitive::u16;
 
+use serde::{Deserialize, Serialize};
+
 use self::registers::{RegisterIndex, Registers};
 use super::mmu::{MemoryOps, Mmu};
 use crate::error::Error;
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum ExecutionState {
     Continue,
     Stop,
@@ -15,7 +17,7 @@ pub enum ExecutionState {
     Halt,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Cpu {
     registers: Registers,
     enable_ime: bool,

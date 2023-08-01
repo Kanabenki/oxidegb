@@ -1,10 +1,12 @@
+use serde::{Deserialize, Serialize};
+
 use super::{
     MapperOps, HIGH_BANK_END, HIGH_BANK_START, LOW_BANK_END, LOW_BANK_START, RAM_BANK_SIZE,
     ROM_BANK_SIZE,
 };
 
 // TODO: Rumble with controller.
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Mbc5 {
     _has_rumble: bool,
     has_ram: bool,

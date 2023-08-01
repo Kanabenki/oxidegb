@@ -1,6 +1,8 @@
 use std::mem;
 
-#[derive(Debug, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct ChannelToggles {
     channel_1: bool,
     channel_2: bool,
@@ -30,7 +32,7 @@ impl ChannelToggles {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct SoundEnable {
     channels: ChannelToggles,
     all: bool,
@@ -43,7 +45,7 @@ impl SoundEnable {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct SoundPanning {
     left: ChannelToggles,
     right: ChannelToggles,
@@ -60,7 +62,7 @@ impl SoundPanning {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct MasterVolVinPan {
     left_volume: u8,
     right_volume: u8,
@@ -83,14 +85,14 @@ impl MasterVolVinPan {
     }
 }
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Default)]
 enum SweepOp {
     #[default]
     Increase = 0,
     Decrease = 1,
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct Sweep {
     pace: u8,
     op: SweepOp,
@@ -112,7 +114,7 @@ impl Sweep {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 enum WaveDuty {
     #[default]
     W0 = 0,
@@ -136,7 +138,7 @@ impl WaveDuty {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct WaveDutyTimerLen {
     wave_duty: WaveDuty,
     init_len_timer: u8,
@@ -161,14 +163,14 @@ impl WaveDutyTimerLen {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 enum EnvelopeDir {
     #[default]
     Decrease = 0,
     Increase = 1,
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct VolumeEnvelope {
     initial: u8,
     direction: EnvelopeDir,
@@ -190,7 +192,7 @@ impl VolumeEnvelope {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct WavelenCtrl {
     trigger: bool,
     sound_len_enable: bool,
@@ -209,7 +211,7 @@ impl WavelenCtrl {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel1 {
     sweep: Sweep,
     wave_duty_timer_len: WaveDutyTimerLen,
@@ -218,7 +220,7 @@ struct Channel1 {
     wavelen_high_ctrl: WavelenCtrl,
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel2 {
     wave_duty_timer_len: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
@@ -226,7 +228,7 @@ struct Channel2 {
     wavelen_high_ctrl: WavelenCtrl,
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel3 {
     enable: bool,
     len_timer: u8,
@@ -236,14 +238,14 @@ struct Channel3 {
     wave_pattern: [u8; 16],
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Copy)]
 enum LfsrWidth {
     #[default]
     B15 = 0,
     B7 = 1,
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct FreqRand {
     clock_shift: u8,
     lfsr_width: LfsrWidth,
@@ -265,7 +267,7 @@ impl FreqRand {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel4 {
     len_timer: u8,
     vol_env: VolumeEnvelope,
@@ -274,7 +276,7 @@ struct Channel4 {
     sound_len_enable: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Apu {
     left_samples: [i16; 6],
     right_samples: [i16; 6],

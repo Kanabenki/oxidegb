@@ -1,4 +1,5 @@
 use flagset::{flags, FlagSet};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Copy, Clone)]
 pub struct RegisterIndex(u8);
@@ -40,7 +41,7 @@ pub enum FlagOp {
     Borrow,
 }
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct Flags(FlagSet<Flag>);
 
 impl Flags {
@@ -135,7 +136,7 @@ impl Flags {
     }
 }
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct Registers {
     pub b: u8,
     pub c: u8,

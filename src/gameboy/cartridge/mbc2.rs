@@ -1,12 +1,13 @@
+use serde::{Deserialize, Serialize};
+
 use super::{
     MapperOps, HIGH_BANK_END, HIGH_BANK_START, LOW_BANK_END, LOW_BANK_START, ROM_BANK_SIZE,
 };
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Mbc2 {
     has_battery: bool,
     ram_enabled: bool,
-    _rom_bank_count: u16,
     rom_bank: u8,
 }
 
@@ -14,11 +15,10 @@ impl Mbc2 {
     pub const RAM_SIZE: usize = 0x200;
     const RAM_ADDR_MASK: u16 = 0x1FF;
 
-    pub const fn new(rom_bank_count: u16, has_battery: bool) -> Self {
+    pub const fn new(has_battery: bool) -> Self {
         Self {
             has_battery,
             ram_enabled: false,
-            _rom_bank_count: rom_bank_count,
             rom_bank: 1,
         }
     }

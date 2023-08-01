@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use super::{
     lcd_control::{LcdControl, SpriteSize, TileDataAddressing},
     obj::{self, Attributes, Priority},
@@ -5,7 +7,7 @@ use super::{
 };
 
 // TODO: simplify this mess
-#[derive(Debug, Copy, Clone)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 enum Action {
     ObjReadAttr,
     ObjReadDataL {
@@ -41,7 +43,7 @@ impl Action {
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Fetcher {
     action: Action,
     waiting_cycle: bool,
@@ -251,12 +253,12 @@ impl Fetcher {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub struct BgPixel {
     pub index: u8,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub struct ObjPixel {
     pub index: u8,
     pub palette: obj::Palette,
@@ -288,7 +290,7 @@ pub fn mix_pixels(
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PixelFifo<T> {
     fifo: [T; PixelFifo::<BgPixel>::SIZE],
     start: usize,

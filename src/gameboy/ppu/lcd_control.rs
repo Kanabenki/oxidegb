@@ -1,4 +1,6 @@
-#[derive(Debug, Copy, Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum TileMapRange {
     Low = 0,
     High = 1,
@@ -13,7 +15,7 @@ impl TileMapRange {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum TileDataAddressing {
     Signed = 0,
     Unsigned = 1,
@@ -40,7 +42,7 @@ impl TileDataAddressing {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum SpriteSize {
     S8x8 = 0,
     S8x16 = 1,
@@ -55,7 +57,7 @@ impl SpriteSize {
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct LcdControl {
     pub lcd_enable: bool,
     pub window_tile_map: TileMapRange,

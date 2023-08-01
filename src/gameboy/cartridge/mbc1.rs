@@ -1,12 +1,14 @@
+use serde::{Deserialize, Serialize};
+
 use super::{MapperOps, RAM_BANK_SIZE, ROM_BANK_SIZE};
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 enum BankMode {
     Rom,
     Ram,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Mbc1 {
     has_ram: bool,
     has_battery: bool,

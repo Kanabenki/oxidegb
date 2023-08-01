@@ -1,18 +1,20 @@
-#[derive(Debug, Clone, Copy, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub enum Palette {
     #[default]
     ObjP0,
     ObjP1,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Priority {
     #[default]
     BehindNonZeroBg,
     AboveBg,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Attributes {
     pub x: u8,
     pub y: u8,

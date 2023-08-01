@@ -5,17 +5,18 @@ mod mbc5;
 mod rom_only;
 
 use enum_dispatch::enum_dispatch;
+use serde::{Deserialize, Serialize};
 
 use self::{mbc1::Mbc1, mbc2::Mbc2, mbc3::Mbc3, mbc5::Mbc5, rom_only::RomOnly};
 use crate::error::Error;
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Destination {
     Japanese,
     NonJapanese,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Header {
     pub title: String,
     pub rom_size: u32,
@@ -62,8 +63,8 @@ impl Header {
             0x02 => Mapper::Mbc1(Mbc1::new(rom_bank_count as u16, true, false)),
             0x03 => Mapper::Mbc1(Mbc1::new(rom_bank_count as u16, true, true)),
 
-            0x05 => Mapper::Mbc2(Mbc2::new(rom_bank_count as u16, false)),
-            0x06 => Mapper::Mbc2(Mbc2::new(rom_bank_count as u16, true)),
+            0x05 => Mapper::Mbc2(Mbc2::new(false)),
+            0x06 => Mapper::Mbc2(Mbc2::new(true)),
 
             0x0F => Mapper::Mbc3(Mbc3::new(true, false, true)),
             0x10 => Mapper::Mbc3(Mbc3::new(true, true, true)),
@@ -115,7 +116,7 @@ trait MapperOps {
 }
 
 #[enum_dispatch]
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Mapper {
     RomOnly(RomOnly),
     Mbc1(Mbc1),
@@ -134,7 +135,7 @@ const HIGH_BANK_END: u16 = 0x7FFF;
 const ROM_BANK_SIZE: usize = 0x4000;
 const RAM_BANK_SIZE: usize = 0x2000;
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Cartridge {
     header: Header,
     mapper: Mapper,

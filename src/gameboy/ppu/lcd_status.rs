@@ -1,4 +1,6 @@
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Mode {
     HBlank = 0,
     VBlank = 1,
@@ -12,7 +14,7 @@ impl Default for Mode {
     }
 }
 
-#[derive(Default, Debug, Copy, Clone)]
+#[derive(Serialize, Deserialize, Default, Debug, Copy, Clone)]
 pub struct LcdStatus {
     coincidence_interrupt_enabled: bool,
     oam_interrupt_enabled: bool,
