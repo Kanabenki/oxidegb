@@ -108,8 +108,6 @@ impl Emulator {
 
         sound_stream.play()?;
 
-        std::thread::sleep(std::time::Duration::from_millis(1000));
-
         Ok(Self {
             event_loop,
             window,

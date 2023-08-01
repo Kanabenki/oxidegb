@@ -1,11 +1,12 @@
 mod mbc1;
 mod mbc2;
 mod mbc3;
+mod mbc5;
 mod rom_only;
 
 use enum_dispatch::enum_dispatch;
 
-use self::{mbc1::Mbc1, mbc2::Mbc2, mbc3::Mbc3, rom_only::RomOnly};
+use self::{mbc1::Mbc1, mbc2::Mbc2, mbc3::Mbc3, mbc5::Mbc5, rom_only::RomOnly};
 use crate::error::Error;
 
 #[derive(Debug)]
@@ -69,6 +70,14 @@ impl Header {
             0x11 => Mapper::Mbc3(Mbc3::new(false, false, false)),
             0x12 => Mapper::Mbc3(Mbc3::new(false, true, false)),
             0x13 => Mapper::Mbc3(Mbc3::new(false, true, true)),
+
+            0x19 => Mapper::Mbc5(Mbc5::new(false, false, false)),
+            0x1A => Mapper::Mbc5(Mbc5::new(false, true, false)),
+            0x1B => Mapper::Mbc5(Mbc5::new(false, true, true)),
+            0x1C => Mapper::Mbc5(Mbc5::new(true, false, false)),
+            0x1D => Mapper::Mbc5(Mbc5::new(true, true, false)),
+            0x1E => Mapper::Mbc5(Mbc5::new(true, true, true)),
+
             id => return Err(Error::UnsupportedMapper(id)),
         };
 
@@ -112,6 +121,7 @@ pub enum Mapper {
     Mbc1(Mbc1),
     Mbc2(Mbc2),
     Mbc3(Mbc3),
+    Mbc5(Mbc5),
 }
 
 const BOOTROM_END: u16 = 0x0100;
