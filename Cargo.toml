@@ -7,7 +7,7 @@ rust-version = "1.66"
 
 [dependencies]
 pixels = "0.13.0"
-winit = "0.28.6"
+winit = "0.29.0-beta.0"
 flagset = { version = "0.4.3", features = ["serde"] }
 enum_dispatch = "0.3.12"
 color-eyre = "0.6.2"
@@ -17,3 +17,4 @@ ringbuf = "0.3.3"
 blip_buf = "0.1.4"
 serde = { version = "1.0.180", features = ["derive"] }
 serde-big-array = "0.5.1"
+ciborium = "0.2.1"

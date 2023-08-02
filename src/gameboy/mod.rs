@@ -10,17 +10,19 @@ mod ppu;
 use std::io::Write;
 
 use clap::Parser;
+use serde::{Deserialize, Serialize};
 
 use crate::{error::Error, gameboy::mmu::MemoryOps};
 use cpu::Cpu;
 
 pub use io::Button;
 
+#[derive(Serialize, Deserialize)]
 struct DebugStatus {
     breakpoints: Vec<u16>,
     should_break: bool,
 }
-
+#[derive(Serialize, Deserialize)]
 pub struct Gameboy {
     cpu: Cpu,
     debug_status: DebugStatus,
@@ -60,6 +62,22 @@ impl Gameboy {
 
     pub fn save_data(&self) -> Option<&[u8]> {
         self.cpu.mmu.cartridge.save_data()
+    }
+
+    pub fn reinit(&mut self, mut gameboy: Self) -> Result<(), Error> {
+        if gameboy.cpu.mmu.cartridge.bootrom_enabled && self.cpu.mmu.cartridge.bootrom.is_none() {
+            return Err(Error::MissingBootrom);
+        }
+        std::mem::swap(
+            &mut self.cpu.mmu.cartridge.rom,
+            &mut gameboy.cpu.mmu.cartridge.rom,
+        );
+        std::mem::swap(
+            &mut self.cpu.mmu.cartridge.bootrom,
+            &mut gameboy.cpu.mmu.cartridge.bootrom,
+        );
+        std::mem::swap(self, &mut gameboy);
+        Ok(())
     }
 
     pub const fn rom_header(&self) -> &cartridge::Header {

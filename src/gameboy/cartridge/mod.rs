@@ -139,9 +139,11 @@ const RAM_BANK_SIZE: usize = 0x2000;
 pub struct Cartridge {
     header: Header,
     mapper: Mapper,
-    bootrom: Option<Vec<u8>>,
-    pub bootrom_enabled: bool,
-    rom: Vec<u8>,
+    #[serde(skip)]
+    pub(crate) bootrom: Option<Vec<u8>>,
+    pub(crate) bootrom_enabled: bool,
+    #[serde(skip)]
+    pub(crate) rom: Vec<u8>,
     ram: Vec<u8>,
 }
 

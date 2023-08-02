@@ -14,8 +14,9 @@ use cpal::{
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use ringbuf::{HeapProducer, HeapRb};
 use winit::{
-    event::{ElementState, Event, VirtualKeyCode, WindowEvent},
+    event::{ElementState, Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
+    keyboard::KeyCode,
     window::{Window, WindowBuilder},
 };
 
@@ -25,11 +26,13 @@ struct Emulator {
     event_loop: Option<EventLoop<()>>,
     window: Window,
     pixels: Pixels,
+    shift_held: bool,
     tmp_sound_buf: [i16; 2048],
     resampling_bufs: (BlipBuf, BlipBuf),
     sound_prod: HeapProducer<i16>,
     _sound_stream: Stream,
     gameboy: Gameboy,
+    rom_path: PathBuf,
     save_file: File,
     delta: u64,
 }
@@ -38,6 +41,7 @@ impl Emulator {
     fn new(
         rom: Vec<u8>,
         bootrom: Option<Vec<u8>>,
+        rom_path: PathBuf,
         mut save_file: File,
         fast_forward: bool,
         debug: bool,
@@ -112,11 +116,13 @@ impl Emulator {
             event_loop,
             window,
             pixels,
+            shift_held: false,
             sound_prod,
             tmp_sound_buf: [0; 2048],
             _sound_stream: sound_stream,
             resampling_bufs,
             gameboy,
+            rom_path,
             save_file,
             delta: 0,
         })
@@ -139,27 +145,88 @@ impl Emulator {
                     }
                 }
                 Event::WindowEvent {
-                    event: WindowEvent::KeyboardInput { input, .. },
+                    event: WindowEvent::ModifiersChanged(modifiers),
                     ..
                 } => {
-                    if let Some(key) = input.virtual_keycode {
-                        let set: bool = match input.state {
-                            ElementState::Pressed => true,
-                            ElementState::Released => false,
-                        };
-                        // TODO: Inputs are hardcoded for now.
-                        // TODO: Check how to handle input being pressed during gb frame loop instead of waiting for the end of the frame
-                        match key {
-                            VirtualKeyCode::P if set => self.gameboy.debug_break(),
-                            VirtualKeyCode::Up => self.gameboy.set_button(Button::Up, set),
-                            VirtualKeyCode::Down => self.gameboy.set_button(Button::Down, set),
-                            VirtualKeyCode::Left => self.gameboy.set_button(Button::Left, set),
-                            VirtualKeyCode::Right => self.gameboy.set_button(Button::Right, set),
-                            VirtualKeyCode::J => self.gameboy.set_button(Button::B, set),
-                            VirtualKeyCode::K => self.gameboy.set_button(Button::A, set),
-                            VirtualKeyCode::U => self.gameboy.set_button(Button::Select, set),
-                            VirtualKeyCode::I => self.gameboy.set_button(Button::Start, set),
-                            _ => {}
+                    self.shift_held = modifiers.state().shift_key();
+                }
+                Event::WindowEvent {
+                    event: WindowEvent::KeyboardInput { event, .. },
+                    ..
+                } => {
+                    let set: bool = match event.state {
+                        ElementState::Pressed => true,
+                        ElementState::Released => false,
+                    };
+                    // TODO: Inputs are hardcoded for now.
+                    // TODO: Check how to handle input being pressed during gb frame loop instead of waiting for the end of the frame
+                    match event.physical_key {
+                        KeyCode::KeyP if set => self.gameboy.debug_break(),
+                        KeyCode::ArrowUp => self.gameboy.set_button(Button::Up, set),
+                        KeyCode::ArrowDown => self.gameboy.set_button(Button::Down, set),
+                        KeyCode::ArrowLeft => self.gameboy.set_button(Button::Left, set),
+                        KeyCode::ArrowRight => self.gameboy.set_button(Button::Right, set),
+                        KeyCode::KeyJ => self.gameboy.set_button(Button::B, set),
+                        KeyCode::KeyK => self.gameboy.set_button(Button::A, set),
+                        KeyCode::KeyU => self.gameboy.set_button(Button::Select, set),
+                        KeyCode::KeyI => self.gameboy.set_button(Button::Start, set),
+                        _ => {}
+                    }
+
+                    let savestate_index = match event.physical_key {
+                        KeyCode::Digit0 if set => Some(0),
+                        KeyCode::Digit1 if set => Some(1),
+                        KeyCode::Digit2 if set => Some(2),
+                        KeyCode::Digit3 if set => Some(3),
+                        KeyCode::Digit4 if set => Some(4),
+                        KeyCode::Digit5 if set => Some(5),
+                        KeyCode::Digit6 if set => Some(6),
+                        KeyCode::Digit7 if set => Some(7),
+                        KeyCode::Digit8 if set => Some(8),
+                        KeyCode::Digit9 if set => Some(9),
+                        _ => None,
+                    };
+
+                    if let Some(index) = savestate_index {
+                        let mut savestate_filename = self.rom_path.file_stem().unwrap().to_owned();
+                        savestate_filename.push("_");
+                        savestate_filename.push(index.to_string());
+                        let savestate_path = self
+                            .rom_path
+                            .with_file_name(savestate_filename)
+                            .with_extension("oxidegb");
+                        if self.shift_held {
+                            match File::open(savestate_path) {
+                                Ok(savestate) => match ciborium::from_reader(savestate) {
+                                    Ok(gameboy) => match self.gameboy.reinit(gameboy) {
+                                        Ok(()) => self.window.request_redraw(),
+                                        Err(error) => eprintln!(
+                                            "Cannot load savestate {} content: {}",
+                                            index,
+                                            Report::from(error)
+                                        ),
+                                    },
+                                    Err(error) => eprintln!(
+                                        "Cannot decode savestate {} content: {}",
+                                        index,
+                                        Report::from(error)
+                                    ),
+                                },
+                                Err(error) => eprintln!(
+                                    "Cannot load savestate {} file: {}",
+                                    index,
+                                    Report::from(error)
+                                ),
+                            }
+                        } else if let Err(error) = ciborium::into_writer(
+                            &self.gameboy,
+                            File::create(savestate_path).unwrap(),
+                        ) {
+                            eprintln!(
+                                "Cannot save savestate {} file: {}",
+                                index,
+                                Report::from(error)
+                            );
                         }
                     }
                 }
@@ -264,7 +331,14 @@ fn main() -> color_eyre::Result<()> {
         |save_file| save_open_options.open(save_file),
     )?;
 
-    let emulator = Emulator::new(rom, bootrom, save, arguments.fast_forward, arguments.debug)?;
+    let emulator = Emulator::new(
+        rom,
+        bootrom,
+        arguments.file,
+        save,
+        arguments.fast_forward,
+        arguments.debug,
+    )?;
     if arguments.info {
         println!(
             "{:?}\n{:?}",
