@@ -44,7 +44,7 @@ impl Action {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Fetcher {
+pub(crate) struct Fetcher {
     action: Action,
     waiting_cycle: bool,
     tile_map_index: u8,
@@ -64,7 +64,7 @@ impl Fetcher {
         indices
     }
 
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             action: Action::BgReadStartTile,
             waiting_cycle: false,
@@ -73,7 +73,7 @@ impl Fetcher {
         }
     }
 
-    pub fn start_line(&mut self) {
+    pub(crate) fn start_line(&mut self) {
         *self = Self {
             waiting_cycle: self.waiting_cycle,
             action: Action::BgReadStartTile,
@@ -82,7 +82,7 @@ impl Fetcher {
         }
     }
 
-    pub fn start_window(&mut self) {
+    pub(crate) fn start_window(&mut self) {
         *self = Self {
             waiting_cycle: self.waiting_cycle,
             action: Action::BgReadTile,
@@ -93,7 +93,7 @@ impl Fetcher {
 
     // TODO simplify arguments
     #[allow(clippy::too_many_arguments)]
-    pub fn tick(
+    pub(crate) fn tick(
         &mut self,
         bg_fifo: &mut PixelFifo<BgPixel>,
         obj_fifo: &mut PixelFifo<ObjPixel>,
@@ -254,18 +254,18 @@ impl Fetcher {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
-pub struct BgPixel {
-    pub index: u8,
+pub(crate) struct BgPixel {
+    pub(crate) index: u8,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
-pub struct ObjPixel {
-    pub index: u8,
-    pub palette: obj::Palette,
-    pub priority: obj::Priority,
+pub(crate) struct ObjPixel {
+    pub(crate) index: u8,
+    pub(crate) palette: obj::Palette,
+    pub(crate) priority: obj::Priority,
 }
 
-pub fn mix_pixels(
+pub(crate) fn mix_pixels(
     bg_pixel: BgPixel,
     obj_pixel: Option<ObjPixel>,
     lcdc: &LcdControl,
@@ -291,7 +291,7 @@ pub fn mix_pixels(
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct PixelFifo<T> {
+pub(crate) struct PixelFifo<T> {
     fifo: [T; PixelFifo::<BgPixel>::SIZE],
     start: usize,
     size: usize,
@@ -337,7 +337,7 @@ impl PixelFifo<BgPixel> {
 }
 
 impl<T: Copy + Default> PixelFifo<T> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             // TODO Find a way to get SIZE without referencing a concrete type
             fifo: [T::default(); PixelFifo::<BgPixel>::SIZE],
@@ -346,7 +346,7 @@ impl<T: Copy + Default> PixelFifo<T> {
         }
     }
 
-    pub fn pop(&mut self) -> Option<T> {
+    pub(crate) fn pop(&mut self) -> Option<T> {
         if self.size > 0 {
             let color = Some(self.fifo[self.start]);
             self.start = (self.start + 1) % Self::SIZE;
@@ -357,7 +357,7 @@ impl<T: Copy + Default> PixelFifo<T> {
         }
     }
 
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.start = 0;
         self.size = 0;
     }

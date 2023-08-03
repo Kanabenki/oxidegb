@@ -8,35 +8,35 @@ use super::{
 use crate::error::Error;
 
 mod map {
-    pub const ROM_START: u16 = 0x0000;
-    pub const ROM_END: u16 = 0x7FFF;
-    pub const VRAM_START: u16 = 0x8000;
-    pub const VRAM_END: u16 = 0x9FFF;
-    pub const EXT_RAM_START: u16 = 0xA000;
-    pub const EXT_RAM_END: u16 = 0xBFFF;
-    pub const WRAM_START: u16 = 0xC000;
-    pub const WRAM_END: u16 = 0xDFFF;
-    pub const ECHO_WRAM_START: u16 = 0xE000;
-    pub const ECHO_WRAM_END: u16 = 0xFDFF;
-    pub const OAM_START: u16 = 0xFE00;
-    pub const OAM_END: u16 = 0xFE9F;
-    pub const UNUSED_START: u16 = 0xFEA0;
-    pub const UNUSED_END: u16 = 0xFEFF;
-    pub const IO_START: u16 = 0xFF00;
-    pub const IO_END: u16 = 0xFF07;
-    pub const UNUSED_2_START: u16 = 0xFF08;
-    pub const UNUSED_2_END: u16 = 0xFF0E;
-    pub const INTERRUPT_FLAGS: u16 = 0xFF0F;
-    pub const APU_REGISTERS_START: u16 = 0xFF10;
-    pub const APU_REGISTERS_END: u16 = 0xFF3F;
-    pub const PPU_REGISTERS_START: u16 = 0xFF40;
-    pub const PPU_REGISTERS_END: u16 = 0xFF4F;
-    pub const DISABLE_BOOTROM: u16 = 0xFF50;
-    pub const CGB_REGISTERS_START: u16 = 0xFF51;
-    pub const CGB_REGISTERS_END: u16 = 0xFF7F;
-    pub const HRAM_START: u16 = 0xFF80;
-    pub const HRAM_END: u16 = 0xFFFE;
-    pub const INTERRUPT_ENABLE: u16 = 0xFFFF;
+    pub(crate) const ROM_START: u16 = 0x0000;
+    pub(crate) const ROM_END: u16 = 0x7FFF;
+    pub(crate) const VRAM_START: u16 = 0x8000;
+    pub(crate) const VRAM_END: u16 = 0x9FFF;
+    pub(crate) const EXT_RAM_START: u16 = 0xA000;
+    pub(crate) const EXT_RAM_END: u16 = 0xBFFF;
+    pub(crate) const WRAM_START: u16 = 0xC000;
+    pub(crate) const WRAM_END: u16 = 0xDFFF;
+    pub(crate) const ECHO_WRAM_START: u16 = 0xE000;
+    pub(crate) const ECHO_WRAM_END: u16 = 0xFDFF;
+    pub(crate) const OAM_START: u16 = 0xFE00;
+    pub(crate) const OAM_END: u16 = 0xFE9F;
+    pub(crate) const UNUSED_START: u16 = 0xFEA0;
+    pub(crate) const UNUSED_END: u16 = 0xFEFF;
+    pub(crate) const IO_START: u16 = 0xFF00;
+    pub(crate) const IO_END: u16 = 0xFF07;
+    pub(crate) const UNUSED_2_START: u16 = 0xFF08;
+    pub(crate) const UNUSED_2_END: u16 = 0xFF0E;
+    pub(crate) const INTERRUPT_FLAGS: u16 = 0xFF0F;
+    pub(crate) const APU_REGISTERS_START: u16 = 0xFF10;
+    pub(crate) const APU_REGISTERS_END: u16 = 0xFF3F;
+    pub(crate) const PPU_REGISTERS_START: u16 = 0xFF40;
+    pub(crate) const PPU_REGISTERS_END: u16 = 0xFF4F;
+    pub(crate) const DISABLE_BOOTROM: u16 = 0xFF50;
+    pub(crate) const CGB_REGISTERS_START: u16 = 0xFF51;
+    pub(crate) const CGB_REGISTERS_END: u16 = 0xFF7F;
+    pub(crate) const HRAM_START: u16 = 0xFF80;
+    pub(crate) const HRAM_END: u16 = 0xFFFE;
+    pub(crate) const INTERRUPT_ENABLE: u16 = 0xFFFF;
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -49,7 +49,7 @@ enum Dma {
     },
 }
 
-pub trait MemoryOps {
+pub(crate) trait MemoryOps {
     fn read_byte(&mut self, address: u16) -> u8;
 
     fn write_byte(&mut self, address: u16, value: u8);
@@ -68,7 +68,7 @@ pub trait MemoryOps {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Mmu {
+pub(crate) struct Mmu {
     #[serde(with = "BigArray")]
     wram: [u8; 8192],
     #[serde(with = "BigArray")]
@@ -84,7 +84,7 @@ pub struct Mmu {
 }
 
 impl Mmu {
-    pub fn new(
+    pub(crate) fn new(
         rom: Vec<u8>,
         bootrom: Option<Vec<u8>>,
         save: Option<Vec<u8>>,
@@ -108,7 +108,7 @@ impl Mmu {
         })
     }
 
-    pub fn tick(&mut self) {
+    pub(crate) fn tick(&mut self) {
         self.apu.tick();
         self.cartridge.tick();
         let io_interrupts = self.io.tick();
@@ -144,19 +144,19 @@ impl Mmu {
         }
     }
 
-    pub const fn interrupt_enable(&self) -> FlagSet<Interrupt> {
+    pub(crate) const fn interrupt_enable(&self) -> FlagSet<Interrupt> {
         self.interrupt_enable
     }
 
-    pub const fn interrupt_flags(&self) -> FlagSet<Interrupt> {
+    pub(crate) const fn interrupt_flags(&self) -> FlagSet<Interrupt> {
         self.interrupt_flags
     }
 
-    pub fn interrupts(&self) -> FlagSet<Interrupt> {
+    pub(crate) fn interrupts(&self) -> FlagSet<Interrupt> {
         self.interrupt_flags & self.interrupt_enable
     }
 
-    pub fn next_interrupt(&self) -> Option<Interrupt> {
+    pub(crate) fn next_interrupt(&self) -> Option<Interrupt> {
         // Needed as the flagset iteration order is undefined
         let interrupts = self.interrupts();
         [
@@ -171,7 +171,7 @@ impl Mmu {
         .find(|&f| interrupts.contains(f))
     }
 
-    pub fn reset_interrupt(&mut self, interrupt: Interrupt) {
+    pub(crate) fn reset_interrupt(&mut self, interrupt: Interrupt) {
         self.interrupt_flags &= !interrupt;
     }
 }

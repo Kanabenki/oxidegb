@@ -6,7 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Eq, PartialEq, Default)]
-pub enum Color {
+pub(crate) enum Color {
     #[default]
     White = 0,
     LightGray = 1,
@@ -29,7 +29,7 @@ impl TryFrom<u8> for Color {
 }
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Default)]
-pub struct Palette([Color; 4]);
+pub(crate) struct Palette([Color; 4]);
 
 impl Index<u8> for Palette {
     type Output = Color;
@@ -40,11 +40,11 @@ impl Index<u8> for Palette {
 }
 
 impl Palette {
-    pub fn value(&self) -> u8 {
+    pub(crate) fn value(&self) -> u8 {
         self[0] as u8 | (self[1] as u8) << 2 | (self[2] as u8) << 4 | (self[3] as u8) << 6
     }
 
-    pub fn set_value(&mut self, value: u8) {
+    pub(crate) fn set_value(&mut self, value: u8) {
         *self = Self([
             (value & 0b11).try_into().unwrap(),
             ((value >> 2) & 0b11).try_into().unwrap(),

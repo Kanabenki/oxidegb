@@ -1,7 +1,7 @@
 use flagset::flags;
 
 flags! {
-    pub enum Interrupt: u8 {
+    pub(crate) enum Interrupt: u8 {
         VBlank  = 0b00001,
         LcdStat = 0b00010,
         Timer   = 0b00100,
@@ -17,7 +17,7 @@ impl Interrupt {
     const SERIAL_ADDRESS: u16 = 0x58;
     const JOYPAD_ADDRESS: u16 = 0x60;
 
-    pub const fn address(&self) -> u16 {
+    pub(crate) const fn address(&self) -> u16 {
         match self {
             Self::VBlank => Self::VBLANK_ADDRESS,
             Self::LcdStat => Self::LCD_STAT_ADDRESS,

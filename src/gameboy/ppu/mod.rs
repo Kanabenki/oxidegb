@@ -19,7 +19,7 @@ use self::{
 use super::interrupts::Interrupt;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum DmaRequest {
+pub(crate) enum DmaRequest {
     None,
     Start(u8),
 }
@@ -51,14 +51,14 @@ impl From<[u8; 4]> for Color {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-pub struct Palettes {
-    pub bg: Palette,
-    pub obj_0: Palette,
-    pub obj_1: Palette,
+pub(crate) struct Palettes {
+    pub(crate) bg: Palette,
+    pub(crate) obj_0: Palette,
+    pub(crate) obj_1: Palette,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Ppu {
+pub(crate) struct Ppu {
     #[serde(with = "BigArray")]
     screen: [Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize],
     #[serde(with = "BigArray")]
@@ -79,7 +79,7 @@ pub struct Ppu {
     scroll_x: u8,
     to_discard_x: u8,
     x_pos: u8,
-    pub line_y: u8,
+    pub(crate) line_y: u8,
     line_y_compare: u8,
     line_y_window: u8,
     window_triggered: bool,
@@ -89,7 +89,7 @@ pub struct Ppu {
 }
 
 impl Ppu {
-    pub const OAM_SIZE: usize = 0xA0;
+    pub(crate) const OAM_SIZE: usize = 0xA0;
     const VRAM_SIZE: usize = 0x2000;
 
     const LCD_SIZE_X: u8 = 160;
@@ -120,7 +120,7 @@ impl Ppu {
 
     const MAX_VISIBLE_SPRITES: usize = 10;
 
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             screen: [palette::Color::Black.into();
                 Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize],
@@ -150,13 +150,13 @@ impl Ppu {
         }
     }
 
-    pub fn new_post_bootrom() -> Self {
+    pub(crate) fn new_post_bootrom() -> Self {
         let mut ppu = Self::new();
         ppu.lcdc.lcd_enable = true;
         ppu
     }
 
-    pub fn tick(&mut self) -> (FlagSet<Interrupt>, DmaRequest) {
+    pub(crate) fn tick(&mut self) -> (FlagSet<Interrupt>, DmaRequest) {
         if !self.lcdc.lcd_enable {
             self.line_y = 0;
             self.stat.mode = Mode::VBlank;
@@ -298,39 +298,41 @@ impl Ppu {
         }
     }
 
-    pub const fn screen(&self) -> &[Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize] {
+    pub(crate) const fn screen(
+        &self,
+    ) -> &[Color; Self::LCD_SIZE_X as usize * Self::LCD_SIZE_Y as usize] {
         &self.screen
     }
 
-    pub const fn read_vram(&self, address: u16) -> u8 {
+    pub(crate) const fn read_vram(&self, address: u16) -> u8 {
         match self.stat.mode {
             Mode::OamSearch | Mode::HBlank | Mode::VBlank => self.vram[address as usize],
             Mode::PixelTransfer => 0xFF,
         }
     }
 
-    pub fn write_vram(&mut self, address: u16, value: u8) {
+    pub(crate) fn write_vram(&mut self, address: u16, value: u8) {
         match self.stat.mode {
             Mode::OamSearch | Mode::HBlank | Mode::VBlank => self.vram[address as usize] = value,
             Mode::PixelTransfer => {}
         }
     }
 
-    pub const fn read_oam(&self, address: u16) -> u8 {
+    pub(crate) const fn read_oam(&self, address: u16) -> u8 {
         match self.stat.mode {
             Mode::HBlank | Mode::VBlank => self.oam[address as usize],
             Mode::OamSearch | Mode::PixelTransfer => 0xFF,
         }
     }
 
-    pub fn write_oam(&mut self, address: u16, value: u8) {
+    pub(crate) fn write_oam(&mut self, address: u16, value: u8) {
         match self.stat.mode {
             Mode::HBlank | Mode::VBlank => self.oam[address as usize] = value,
             Mode::OamSearch | Mode::PixelTransfer => {}
         }
     }
 
-    pub fn read_registers(&self, address: u16) -> u8 {
+    pub(crate) fn read_registers(&self, address: u16) -> u8 {
         match address {
             Self::LCDC => self.lcdc.value(),
             Self::STAT => self.stat.value(),
@@ -349,7 +351,7 @@ impl Ppu {
         }
     }
 
-    pub fn write_registers(&mut self, address: u16, value: u8) {
+    pub(crate) fn write_registers(&mut self, address: u16, value: u8) {
         match address {
             Self::LCDC => {
                 let enabled = self.lcdc.lcd_enable;

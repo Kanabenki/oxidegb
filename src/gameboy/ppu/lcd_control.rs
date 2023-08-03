@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-pub enum TileMapRange {
+pub(crate) enum TileMapRange {
     Low = 0,
     High = 1,
 }
 
 impl TileMapRange {
-    pub const fn base_address(&self) -> u16 {
+    pub(crate) const fn base_address(&self) -> u16 {
         match self {
             Self::Low => 0x1800,
             Self::High => 0x1C00,
@@ -16,13 +16,13 @@ impl TileMapRange {
 }
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-pub enum TileDataAddressing {
+pub(crate) enum TileDataAddressing {
     Signed = 0,
     Unsigned = 1,
 }
 
 impl TileDataAddressing {
-    pub const fn address_from_index_bg(&self, index: u8, line: u16) -> u16 {
+    pub(crate) const fn address_from_index_bg(&self, index: u8, line: u16) -> u16 {
         match self {
             Self::Unsigned => (index as u16 * 16) + (line % 8) * 2,
             Self::Signed => {
@@ -31,7 +31,12 @@ impl TileDataAddressing {
         }
     }
 
-    pub const fn address_from_index_obj(&self, index: u8, line: u16, size: SpriteSize) -> u16 {
+    pub(crate) const fn address_from_index_obj(
+        &self,
+        index: u8,
+        line: u16,
+        size: SpriteSize,
+    ) -> u16 {
         match self {
             Self::Unsigned => (index as u16 * 16) + (line % size.height() as u16) * 2,
             Self::Signed => {
@@ -43,13 +48,13 @@ impl TileDataAddressing {
 }
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-pub enum SpriteSize {
+pub(crate) enum SpriteSize {
     S8x8 = 0,
     S8x16 = 1,
 }
 
 impl SpriteSize {
-    pub const fn height(&self) -> u8 {
+    pub(crate) const fn height(&self) -> u8 {
         match self {
             Self::S8x8 => 8,
             Self::S8x16 => 16,
@@ -58,19 +63,19 @@ impl SpriteSize {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct LcdControl {
-    pub lcd_enable: bool,
-    pub window_tile_map: TileMapRange,
-    pub window_enable: bool,
-    pub bg_window_addressing: TileDataAddressing,
-    pub bg_tile_map: TileMapRange,
-    pub obj_size: SpriteSize,
-    pub obj_enable: bool,
-    pub bg_window_enable: bool,
+pub(crate) struct LcdControl {
+    pub(crate) lcd_enable: bool,
+    pub(crate) window_tile_map: TileMapRange,
+    pub(crate) window_enable: bool,
+    pub(crate) bg_window_addressing: TileDataAddressing,
+    pub(crate) bg_tile_map: TileMapRange,
+    pub(crate) obj_size: SpriteSize,
+    pub(crate) obj_enable: bool,
+    pub(crate) bg_window_enable: bool,
 }
 
 impl LcdControl {
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             lcd_enable: false,
             window_tile_map: TileMapRange::Low,
@@ -83,7 +88,7 @@ impl LcdControl {
         }
     }
 
-    pub const fn value(&self) -> u8 {
+    pub(crate) const fn value(&self) -> u8 {
         (self.lcd_enable as u8) << 7
             | (self.window_tile_map as u8) << 6
             | (self.window_enable as u8) << 5
@@ -94,7 +99,7 @@ impl LcdControl {
             | (self.bg_window_enable as u8)
     }
 
-    pub fn set_value(&mut self, value: u8) {
+    pub(crate) fn set_value(&mut self, value: u8) {
         self.lcd_enable = value & (1 << 7) != 0;
         self.window_tile_map = if value & (1 << 6) == 0 {
             TileMapRange::Low

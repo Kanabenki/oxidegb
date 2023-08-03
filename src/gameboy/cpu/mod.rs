@@ -10,7 +10,7 @@ use super::mmu::{MemoryOps, Mmu};
 use crate::error::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum ExecutionState {
+pub(crate) enum ExecutionState {
     Continue,
     Stop,
     IllegalInstruction,
@@ -18,13 +18,13 @@ pub enum ExecutionState {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Cpu {
+pub(crate) struct Cpu {
     registers: Registers,
     enable_ime: bool,
     // TODO cleanup visibility
     pub(super) mmu: Mmu,
     cycles: u64,
-    pub execution_state: ExecutionState,
+    pub(crate) execution_state: ExecutionState,
 }
 
 impl MemoryOps for Cpu {
@@ -40,7 +40,7 @@ impl MemoryOps for Cpu {
 }
 
 impl Cpu {
-    pub fn new(
+    pub(crate) fn new(
         rom: Vec<u8>,
         bootrom: Option<Vec<u8>>,
         save: Option<Vec<u8>>,
@@ -59,7 +59,7 @@ impl Cpu {
         })
     }
 
-    pub fn next_instruction(&mut self) -> u64 {
+    pub(crate) fn next_instruction(&mut self) -> u64 {
         // TODO Ensure proper behaviour for those.
         match self.execution_state {
             ExecutionState::Continue => {}
@@ -157,11 +157,11 @@ impl Cpu {
         self.write_dbyte(self.registers.sp, value);
     }
 
-    pub const fn registers(&self) -> &Registers {
+    pub(crate) const fn registers(&self) -> &Registers {
         &self.registers
     }
 
-    pub fn cycles(&self) -> u64 {
+    pub(crate) fn cycles(&self) -> u64 {
         self.cycles
     }
 }

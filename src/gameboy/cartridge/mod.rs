@@ -11,19 +11,19 @@ use self::{mbc1::Mbc1, mbc2::Mbc2, mbc3::Mbc3, mbc5::Mbc5, rom_only::RomOnly};
 use crate::error::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum Destination {
+pub(crate) enum Destination {
     Japanese,
     NonJapanese,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Header {
-    pub title: String,
-    pub rom_size: u32,
-    pub rom_bank_count: u32,
-    pub ram_size: u32,
-    pub ram_bank_count: u32,
-    pub destination: Destination,
+    pub(crate) title: String,
+    pub(crate) rom_size: u32,
+    pub(crate) rom_bank_count: u32,
+    pub(crate) ram_size: u32,
+    pub(crate) ram_bank_count: u32,
+    pub(crate) destination: Destination,
 }
 
 impl Header {
@@ -136,9 +136,9 @@ const ROM_BANK_SIZE: usize = 0x4000;
 const RAM_BANK_SIZE: usize = 0x2000;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Cartridge {
-    header: Header,
-    mapper: Mapper,
+pub(crate) struct Cartridge {
+    pub(crate) header: Header,
+    pub(crate) mapper: Mapper,
     #[serde(skip)]
     pub(crate) bootrom: Option<Vec<u8>>,
     pub(crate) bootrom_enabled: bool,
@@ -148,7 +148,7 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub fn new(
+    pub(crate) fn new(
         rom: Vec<u8>,
         bootrom: Option<Vec<u8>>,
         save: Option<Vec<u8>>,
@@ -171,7 +171,6 @@ impl Cartridge {
         let bootrom_enabled = bootrom.is_some();
         if let Some(bootrom) = &bootrom {
             if bootrom.len() != 0x100 {
-                // TODO Checksum ?
                 return Err(Error::InvalidBootRom);
             }
         }
@@ -186,23 +185,15 @@ impl Cartridge {
         })
     }
 
-    pub fn tick(&mut self) {
+    pub(crate) fn tick(&mut self) {
         self.mapper.tick();
     }
 
-    pub const fn header(&self) -> &Header {
-        &self.header
-    }
-
-    pub const fn mapper(&self) -> &Mapper {
-        &self.mapper
-    }
-
-    pub fn disable_bootrom(&mut self) {
+    pub(crate) fn disable_bootrom(&mut self) {
         self.bootrom_enabled = false;
     }
 
-    pub fn read_rom(&mut self, address: u16) -> u8 {
+    pub(crate) fn read_rom(&mut self, address: u16) -> u8 {
         match &self.bootrom {
             Some(bootrom) if self.bootrom_enabled && address <= BOOTROM_END => {
                 bootrom[address as usize]
@@ -211,7 +202,7 @@ impl Cartridge {
         }
     }
 
-    pub fn write_rom(&mut self, address: u16, value: u8) {
+    pub(crate) fn write_rom(&mut self, address: u16, value: u8) {
         match &mut self.bootrom {
             Some(bootrom) if self.bootrom_enabled && address <= BOOTROM_END => {
                 bootrom[address as usize] = value
@@ -220,15 +211,15 @@ impl Cartridge {
         }
     }
 
-    pub fn read_ram(&mut self, address: u16) -> u8 {
+    pub(crate) fn read_ram(&mut self, address: u16) -> u8 {
         self.mapper.read_ram(&self.ram, address)
     }
 
-    pub fn write_ram(&mut self, address: u16, value: u8) {
+    pub(crate) fn write_ram(&mut self, address: u16, value: u8) {
         self.mapper.write_ram(&mut self.ram, address, value);
     }
 
-    pub fn save_data(&self) -> Option<&[u8]> {
+    pub(crate) fn save_data(&self) -> Option<&[u8]> {
         if self.mapper.can_save() {
             Some(&self.ram)
         } else {

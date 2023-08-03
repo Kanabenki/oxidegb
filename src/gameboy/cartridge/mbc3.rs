@@ -48,7 +48,7 @@ impl Mbc3 {
     const RTC_DAY_LOW_REG: u8 = 0x0B;
     const RTC_DAY_HIGH_REG: u8 = 0x0C;
 
-    pub fn new(has_rtc: bool, has_ram: bool, has_battery: bool) -> Self {
+    pub(crate) fn new(has_rtc: bool, has_ram: bool, has_battery: bool) -> Self {
         Self {
             has_rtc,
             has_ram,

@@ -27,7 +27,7 @@ impl Mbc5 {
     const RAM_BANK_START: u16 = 0x4000;
     const RAM_BANK_END: u16 = 0x5FFF;
 
-    pub fn new(has_rumble: bool, has_ram: bool, has_battery: bool) -> Self {
+    pub(crate) fn new(has_rumble: bool, has_ram: bool, has_battery: bool) -> Self {
         Self {
             _has_rumble: has_rumble,
             has_ram,

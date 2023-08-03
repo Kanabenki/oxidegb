@@ -12,10 +12,10 @@ pub struct Mbc2 {
 }
 
 impl Mbc2 {
-    pub const RAM_SIZE: usize = 0x200;
+    pub(crate) const RAM_SIZE: usize = 0x200;
     const RAM_ADDR_MASK: u16 = 0x1FF;
 
-    pub const fn new(has_battery: bool) -> Self {
+    pub(crate) const fn new(has_battery: bool) -> Self {
         Self {
             has_battery,
             ram_enabled: false,

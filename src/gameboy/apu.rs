@@ -277,7 +277,7 @@ struct Channel4 {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-pub struct Apu {
+pub(crate) struct Apu {
     left_samples: [i16; 6],
     right_samples: [i16; 6],
     samples_count: usize,
@@ -321,11 +321,11 @@ impl Apu {
     const CH3_WAVE_PATTERN_START_ADDRESS: u16 = 0xFF30;
     const CH3_WAVE_PATTERN_END_ADDRESS: u16 = 0xFF3F;
 
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Default::default()
     }
 
-    pub fn tick(&mut self) {
+    pub(crate) fn tick(&mut self) {
         if self.samples_count >= 6 {
             // Samples were not fetched, we skip them.
             self.samples_count = 0;
@@ -335,12 +335,12 @@ impl Apu {
         self.samples_count += 1;
     }
 
-    pub fn samples(&mut self) -> ([i16; 6], [i16; 6], usize) {
+    pub(crate) fn samples(&mut self) -> ([i16; 6], [i16; 6], usize) {
         let count = mem::replace(&mut self.samples_count, 0);
         (self.left_samples, self.right_samples, count)
     }
 
-    pub fn read(&self, address: u16) -> u8 {
+    pub(crate) fn read(&self, address: u16) -> u8 {
         match address {
             Self::CH1_SWEEP_ADDRESS => self.channel_1.sweep.value(),
             Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.channel_1.wave_duty_timer_len.value(),
@@ -375,7 +375,7 @@ impl Apu {
         }
     }
 
-    pub fn write(&mut self, address: u16, value: u8) {
+    pub(crate) fn write(&mut self, address: u16, value: u8) {
         match address {
             Self::CH1_SWEEP_ADDRESS => self.channel_1.sweep.set_value(value),
             Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.channel_1.vol_env.set_value(value),

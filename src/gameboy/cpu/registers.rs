@@ -2,27 +2,27 @@ use flagset::{flags, FlagSet};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Copy, Clone)]
-pub struct RegisterIndex(u8);
+pub(crate) struct RegisterIndex(u8);
 
 impl RegisterIndex {
-    pub const fn from_opcode_first(opcode: u8) -> Self {
+    pub(crate) const fn from_opcode_first(opcode: u8) -> Self {
         Self((opcode >> 3) & 0b111)
     }
 
-    pub const fn from_opcode_second(opcode: u8) -> Self {
+    pub(crate) const fn from_opcode_second(opcode: u8) -> Self {
         Self(opcode & 0b111)
     }
 
-    pub const fn value(&self) -> u8 {
+    pub(crate) const fn value(&self) -> u8 {
         self.0
     }
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct DoubleRegisterIndex(u8);
+pub(crate) struct DoubleRegisterIndex(u8);
 
 impl DoubleRegisterIndex {
-    pub const fn from_opcode(opcode: u8) -> Self {
+    pub(crate) const fn from_opcode(opcode: u8) -> Self {
         Self((opcode >> 4) & 0b11)
     }
 }
@@ -36,13 +36,13 @@ flags! {
     }
 }
 
-pub enum FlagOp {
+pub(crate) enum FlagOp {
     Carry,
     Borrow,
 }
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Default)]
-pub struct Flags(FlagSet<Flag>);
+pub(crate) struct Flags(FlagSet<Flag>);
 
 impl Flags {
     fn is_set(&self, flag: Flag) -> bool {
@@ -65,7 +65,7 @@ impl Flags {
         self.0 = FlagSet::new_truncated(value);
     }
 
-    pub fn update_carry_u8(&mut self, lhs: u8, rhs: u8, with_carry: bool, flag_op: FlagOp) {
+    pub(crate) fn update_carry_u8(&mut self, lhs: u8, rhs: u8, with_carry: bool, flag_op: FlagOp) {
         let carry = u8::from(with_carry && self.carry());
         let set = match flag_op {
             FlagOp::Carry => lhs as u16 + rhs as u16 + carry as u16 > 0xff,
@@ -74,7 +74,7 @@ impl Flags {
         self.set(Flag::C, set);
     }
 
-    pub fn update_carry_u16(&mut self, lhs: u16, rhs: u16, flag_op: FlagOp) {
+    pub(crate) fn update_carry_u16(&mut self, lhs: u16, rhs: u16, flag_op: FlagOp) {
         let set = match flag_op {
             FlagOp::Carry => lhs as u32 + rhs as u32 > 0xffff,
             FlagOp::Borrow => lhs < rhs,
@@ -82,7 +82,13 @@ impl Flags {
         self.set(Flag::C, set);
     }
 
-    pub fn update_half_carry_u8(&mut self, lhs: u8, rhs: u8, with_carry: bool, flag_op: FlagOp) {
+    pub(crate) fn update_half_carry_u8(
+        &mut self,
+        lhs: u8,
+        rhs: u8,
+        with_carry: bool,
+        flag_op: FlagOp,
+    ) {
         let carry = u8::from(with_carry && self.carry());
         let set = match flag_op {
             FlagOp::Carry => ((lhs & 0xf) + (rhs & 0xf)) + carry > 0xf,
@@ -91,7 +97,7 @@ impl Flags {
         self.set(Flag::H, set);
     }
 
-    pub fn update_half_carry_u16(&mut self, lhs: u16, rhs: u16, flag_op: FlagOp) {
+    pub(crate) fn update_half_carry_u16(&mut self, lhs: u16, rhs: u16, flag_op: FlagOp) {
         let set = match flag_op {
             FlagOp::Carry => ((lhs & 0xfff) + (rhs & 0xfff)) > 0xfff,
             FlagOp::Borrow => (lhs & 0xfff) < (rhs & 0xfff),
@@ -99,64 +105,64 @@ impl Flags {
         self.set(Flag::H, set);
     }
 
-    pub fn update_zero(&mut self, value: u8) {
+    pub(crate) fn update_zero(&mut self, value: u8) {
         self.set(Flag::Z, value == 0);
     }
 
-    pub fn zero(&self) -> bool {
+    pub(crate) fn zero(&self) -> bool {
         self.is_set(Flag::Z)
     }
 
-    pub fn negative(&self) -> bool {
+    pub(crate) fn negative(&self) -> bool {
         self.is_set(Flag::N)
     }
 
-    pub fn set_negative(&mut self, set: bool) {
+    pub(crate) fn set_negative(&mut self, set: bool) {
         self.set(Flag::N, set);
     }
 
-    pub fn half_carry(&self) -> bool {
+    pub(crate) fn half_carry(&self) -> bool {
         self.is_set(Flag::H)
     }
 
-    pub fn set_half_carry(&mut self, set: bool) {
+    pub(crate) fn set_half_carry(&mut self, set: bool) {
         self.set(Flag::H, set);
     }
 
-    pub fn carry(&self) -> bool {
+    pub(crate) fn carry(&self) -> bool {
         self.is_set(Flag::C)
     }
 
-    pub fn set_carry(&mut self, set: bool) {
+    pub(crate) fn set_carry(&mut self, set: bool) {
         self.set(Flag::C, set);
     }
 
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.0 = FlagSet::new_truncated(0);
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Default)]
-pub struct Registers {
-    pub b: u8,
-    pub c: u8,
-    pub d: u8,
-    pub e: u8,
-    pub h: u8,
-    pub l: u8,
-    pub flags: Flags,
-    pub a: u8,
-    pub sp: u16,
-    pub pc: u16,
-    pub ime: bool,
+pub(crate) struct Registers {
+    pub(crate) b: u8,
+    pub(crate) c: u8,
+    pub(crate) d: u8,
+    pub(crate) e: u8,
+    pub(crate) h: u8,
+    pub(crate) l: u8,
+    pub(crate) flags: Flags,
+    pub(crate) a: u8,
+    pub(crate) sp: u16,
+    pub(crate) pc: u16,
+    pub(crate) ime: bool,
 }
 
 impl Registers {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Default::default()
     }
 
-    pub fn new_post_bootrom() -> Self {
+    pub(crate) fn new_post_bootrom() -> Self {
         let flags = Flags(Flag::C | Flag::H | Flag::Z);
         Self {
             b: 0x00,
@@ -173,7 +179,7 @@ impl Registers {
         }
     }
 
-    pub fn r(&self, index: RegisterIndex) -> u8 {
+    pub(crate) fn r(&self, index: RegisterIndex) -> u8 {
         match index.0 {
             0 => self.b,
             1 => self.c,
@@ -187,7 +193,7 @@ impl Registers {
         }
     }
 
-    pub fn set_r(&mut self, index: RegisterIndex, value: u8) {
+    pub(crate) fn set_r(&mut self, index: RegisterIndex, value: u8) {
         match index.0 {
             0 => self.b = value,
             1 => self.c = value,
@@ -201,7 +207,7 @@ impl Registers {
         }
     }
 
-    pub fn rr(&self, index: DoubleRegisterIndex) -> u16 {
+    pub(crate) fn rr(&self, index: DoubleRegisterIndex) -> u16 {
         let bytes = match index.0 {
             0 => [self.b, self.c],
             1 => [self.d, self.e],
@@ -212,7 +218,7 @@ impl Registers {
         u16::from_be_bytes(bytes)
     }
 
-    pub fn set_rr(&mut self, index: DoubleRegisterIndex, value: u16) {
+    pub(crate) fn set_rr(&mut self, index: DoubleRegisterIndex, value: u16) {
         let [high, low] = value.to_be_bytes();
         match index.0 {
             0 => {
@@ -232,21 +238,21 @@ impl Registers {
         }
     }
 
-    pub const fn hl(&self) -> u16 {
+    pub(crate) const fn hl(&self) -> u16 {
         u16::from_be_bytes([self.h, self.l])
     }
 
-    pub fn set_hl(&mut self, value: u16) {
+    pub(crate) fn set_hl(&mut self, value: u16) {
         let [high, low] = value.to_be_bytes();
         self.h = high;
         self.l = low;
     }
 
-    pub fn af(&self) -> u16 {
+    pub(crate) fn af(&self) -> u16 {
         u16::from_be_bytes([self.a, self.flags.value()])
     }
 
-    pub fn set_af(&mut self, value: u16) {
+    pub(crate) fn set_af(&mut self, value: u16) {
         let [high, low] = value.to_be_bytes();
         self.a = high;
         self.flags.set_value(low);

@@ -41,7 +41,7 @@ enum InputLine {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Buttons {
+pub(crate) struct Buttons {
     directions: u8,
     buttons: u8,
     current_line: InputLine,
@@ -83,7 +83,7 @@ impl Buttons {
         }
     }
 
-    pub fn set_button(&mut self, button: Button, set: bool) {
+    pub(crate) fn set_button(&mut self, button: Button, set: bool) {
         if set && self.read() & 0x0F == 0x0F {
             self.interrupt_raised = true;
         }
@@ -235,29 +235,29 @@ impl Timer {
 }
 
 mod map {
-    pub const BUTTONS: u16 = 0xFF00;
-    pub const SERIAL_TRANSFER: u16 = 0xFF01;
-    pub const SERIAL_CONTROL: u16 = 0xFF02;
-    pub const UNUSED: u16 = 0xFF03;
-    pub const TIMER_START: u16 = 0xFF04;
-    pub const TIMER_END: u16 = 0xFF07;
+    pub(crate) const BUTTONS: u16 = 0xFF00;
+    pub(crate) const SERIAL_TRANSFER: u16 = 0xFF01;
+    pub(crate) const SERIAL_CONTROL: u16 = 0xFF02;
+    pub(crate) const UNUSED: u16 = 0xFF03;
+    pub(crate) const TIMER_START: u16 = 0xFF04;
+    pub(crate) const TIMER_END: u16 = 0xFF07;
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Io {
+pub(crate) struct Io {
     pub(super) buttons: Buttons,
     timer: Timer,
 }
 
 impl Io {
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             buttons: Buttons::new(),
             timer: Timer::new(),
         }
     }
 
-    pub fn tick(&mut self) -> FlagSet<Interrupt> {
+    pub(crate) fn tick(&mut self) -> FlagSet<Interrupt> {
         let mut interrupts = FlagSet::new_truncated(0);
         if self.buttons.interrupt_raised {
             interrupts |= Interrupt::Joypad;
@@ -270,7 +270,7 @@ impl Io {
         interrupts
     }
 
-    pub fn read(&self, address: u16) -> u8 {
+    pub(crate) fn read(&self, address: u16) -> u8 {
         use map::*;
         match address {
             BUTTONS => self.buttons.read(),
@@ -284,7 +284,7 @@ impl Io {
         }
     }
 
-    pub fn write(&mut self, address: u16, value: u8) {
+    pub(crate) fn write(&mut self, address: u16, value: u8) {
         use map::*;
         match address {
             BUTTONS => self.buttons.write(value),

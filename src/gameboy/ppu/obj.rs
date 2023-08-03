@@ -1,32 +1,32 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
-pub enum Palette {
+pub(crate) enum Palette {
     #[default]
     ObjP0,
     ObjP1,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Priority {
+pub(crate) enum Priority {
     #[default]
     BehindNonZeroBg,
     AboveBg,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Attributes {
-    pub x: u8,
-    pub y: u8,
-    pub tile_index: u8,
-    pub flip_x: bool,
-    pub flip_y: bool,
-    pub priority: Priority,
-    pub palette: Palette,
+pub(crate) struct Attributes {
+    pub(crate) x: u8,
+    pub(crate) y: u8,
+    pub(crate) tile_index: u8,
+    pub(crate) flip_x: bool,
+    pub(crate) flip_y: bool,
+    pub(crate) priority: Priority,
+    pub(crate) palette: Palette,
 }
 
 impl Attributes {
-    pub const fn parse(values: [u8; 4]) -> Self {
+    pub(crate) const fn parse(values: [u8; 4]) -> Self {
         let y = values[0];
         let x = values[1];
         let tile_index = values[2];

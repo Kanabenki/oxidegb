@@ -12,16 +12,16 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MissingBootrom => write!(f, "BootRom is enabled but not BootRom was provided"),
-            Self::InvalidBootRom => write!(f, "BootRom is invalid"),
+            Self::MissingBootrom => write!(f, "bootrom is enabled but no bootrom was provided"),
+            Self::InvalidBootRom => write!(f, "bootrom size isn't 0x100 bytes"),
             Self::InvalidSave => write!(
                 f,
-                "Save size does not match the size expected by the loaded rom"
+                "save size does not match the size expected by the loaded rom"
             ),
             Self::InvalidRomHeader(reason) => {
-                write!(f, "Rom header cannot be parsed ({reason})")
+                write!(f, "rom header cannot be parsed ({reason})")
             }
-            Self::UnsupportedMapper(id) => write!(f, "Unsupported rom mapper id {id}"),
+            Self::UnsupportedMapper(id) => write!(f, "unsupported rom mapper id {id}"),
         }
     }
 }

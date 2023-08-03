@@ -81,11 +81,11 @@ impl Gameboy {
     }
 
     pub const fn rom_header(&self) -> &cartridge::Header {
-        self.cpu.mmu.cartridge.header()
+        &self.cpu.mmu.cartridge.header
     }
 
     pub const fn mapper(&self) -> &cartridge::Mapper {
-        self.cpu.mmu.cartridge.mapper()
+        &self.cpu.mmu.cartridge.mapper
     }
 
     pub fn set_button(&mut self, button: Button, set: bool) {
@@ -96,6 +96,7 @@ impl Gameboy {
         self.debug_status.should_break = true;
     }
 
+    // TODO: Probably move to Emulator
     fn run_debugger(&mut self) {
         if !self
             .debug_status

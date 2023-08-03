@@ -35,7 +35,7 @@ impl Mbc1 {
     const WRITE_MODE_START: u16 = 0x6000;
     const WRITE_MODE_END: u16 = 0x7FFF;
 
-    pub const fn new(rom_bank_count: u16, has_ram: bool, has_battery: bool) -> Self {
+    pub(crate) const fn new(rom_bank_count: u16, has_ram: bool, has_battery: bool) -> Self {
         Self {
             has_ram,
             has_battery,
