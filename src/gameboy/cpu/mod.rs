@@ -64,7 +64,7 @@ impl Cpu {
             ExecutionState::Continue => {}
             ExecutionState::Halt => {
                 if self.mmu.interrupts().is_empty() {
-                    self.mmu.tick();
+                    self.tick();
                     return self.cycles;
                 } else {
                     self.execution_state = ExecutionState::Continue;
@@ -72,7 +72,7 @@ impl Cpu {
             }
             ExecutionState::Stop => {
                 if self.mmu.interrupts().is_empty() {
-                    self.mmu.tick_stopped();
+                    self.tick_stopped();
                     return self.cycles;
                 } else {
                     self.execution_state = ExecutionState::Continue;
@@ -107,6 +107,11 @@ impl Cpu {
     fn tick(&mut self) {
         self.cycles += 4;
         self.mmu.tick();
+    }
+
+    fn tick_stopped(&mut self) {
+        self.cycles += 4;
+        self.mmu.tick_stopped();
     }
 
     fn fetch_byte_pc(&mut self) -> u8 {

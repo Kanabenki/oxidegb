@@ -6,7 +6,10 @@ use std::{
 
 use blip_buf::BlipBuf;
 use clap::Parser;
-use color_eyre::{eyre::eyre, Report};
+use color_eyre::{
+    eyre::{self, eyre, WrapErr},
+    Report,
+};
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     SampleFormat, SampleRate, Stream, StreamConfig,
@@ -106,7 +109,12 @@ impl Emulator {
             move |data: &mut [i16], _| {
                 sound_cons.pop_slice(data);
             },
-            move |error| eprintln!("Error occurred in audio stream: {}", Report::from(error)),
+            move |error| {
+                eprintln!(
+                    "{:?}",
+                    Report::from(error).wrap_err("Error occurred in audio stream")
+                )
+            },
             None,
         )?;
 
@@ -196,37 +204,39 @@ impl Emulator {
                             .with_file_name(savestate_filename)
                             .with_extension("oxidegb");
                         if self.shift_held {
-                            match File::open(savestate_path) {
-                                Ok(savestate) => match ciborium::from_reader(savestate) {
-                                    Ok(gameboy) => match self.gameboy.reinit(gameboy) {
-                                        Ok(()) => self.window.request_redraw(),
-                                        Err(error) => eprintln!(
-                                            "Cannot load savestate {} content: {}",
-                                            index,
-                                            Report::from(error)
-                                        ),
-                                    },
-                                    Err(error) => eprintln!(
-                                        "Cannot decode savestate {} content: {}",
-                                        index,
-                                        Report::from(error)
-                                    ),
-                                },
-                                Err(error) => eprintln!(
-                                    "Cannot load savestate {} file: {}",
-                                    index,
-                                    Report::from(error)
-                                ),
-                            }
-                        } else if let Err(error) = ciborium::into_writer(
-                            &self.gameboy,
-                            File::create(savestate_path).unwrap(),
-                        ) {
-                            eprintln!(
-                                "Cannot save savestate {} file: {}",
-                                index,
-                                Report::from(error)
+                            let load_res: Result<(), eyre::Error> = (|| {
+                                let savestate = File::open(savestate_path).wrap_err_with(|| {
+                                    format!("Cannot load savestate {index} file")
+                                })?;
+                                let gameboy =
+                                    ciborium::from_reader(savestate).wrap_err_with(|| {
+                                        format!("Cannot load savestate {index} content")
+                                    })?;
+                                self.gameboy.reinit(gameboy)?;
+                                Ok(())
+                            })(
                             );
+                            match load_res {
+                                Ok(()) => self.window.request_redraw(),
+                                Err(error) => eprintln!("{error:?}"),
+                            }
+                        } else {
+                            let save_res: Result<(), eyre::Error> = (|| {
+                                ciborium::into_writer(
+                                    &self.gameboy,
+                                    File::create(savestate_path).wrap_err_with(|| {
+                                        format!("Cannot create savestate {index} file")
+                                    })?,
+                                )
+                                .wrap_err_with(|| {
+                                    format!("Cannot save savestate {index} content")
+                                })?;
+                                Ok(())
+                            })(
+                            );
+                            if let Err(error) = save_res {
+                                eprintln!("{error:?}");
+                            }
                         }
                     }
                 }
@@ -242,10 +252,14 @@ impl Emulator {
                 } if window_id == self.window.id() => {
                     if let Some(save_data) = self.gameboy.save_data() {
                         let len = save_data.len();
-                        // TODO log any error
-                        self.save_file.seek(SeekFrom::Start(0)).unwrap();
-                        self.save_file.write_all(save_data).unwrap();
-                        self.save_file.set_len(len as u64).unwrap();
+
+                        if let Err(error) = (|| {
+                            self.save_file.seek(SeekFrom::Start(0))?;
+                            self.save_file.write_all(save_data)?;
+                            self.save_file.set_len(len as u64)
+                        })() {
+                            eprintln!("{error:?}");
+                        }
                     }
                     *control_flow = ControlFlow::Exit;
                 }
