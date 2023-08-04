@@ -19,11 +19,10 @@ pub(crate) enum ExecutionState {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Cpu {
-    registers: Registers,
+    pub(crate) registers: Registers,
     enable_ime: bool,
-    // TODO cleanup visibility
-    pub(super) mmu: Mmu,
-    cycles: u64,
+    pub(crate) mmu: Mmu,
+    pub(crate) cycles: u64,
     pub(crate) execution_state: ExecutionState,
 }
 
@@ -65,13 +64,20 @@ impl Cpu {
             ExecutionState::Continue => {}
             ExecutionState::Halt => {
                 if self.mmu.interrupts().is_empty() {
-                    self.tick();
+                    self.mmu.tick();
                     return self.cycles;
                 } else {
                     self.execution_state = ExecutionState::Continue;
                 }
             }
-            ExecutionState::Stop => todo!(),
+            ExecutionState::Stop => {
+                if self.mmu.interrupts().is_empty() {
+                    self.mmu.tick_stopped();
+                    return self.cycles;
+                } else {
+                    self.execution_state = ExecutionState::Continue;
+                }
+            }
             ExecutionState::IllegalInstruction => return self.cycles,
         }
 
@@ -155,13 +161,5 @@ impl Cpu {
     fn push_stack(&mut self, value: u16) {
         self.registers.sp = self.registers.sp.wrapping_sub(2);
         self.write_dbyte(self.registers.sp, value);
-    }
-
-    pub(crate) const fn registers(&self) -> &Registers {
-        &self.registers
-    }
-
-    pub(crate) fn cycles(&self) -> u64 {
-        self.cycles
     }
 }

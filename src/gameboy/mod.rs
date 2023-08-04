@@ -47,7 +47,7 @@ impl Gameboy {
 
     pub fn run_instruction(&mut self) -> u64 {
         self.run_debugger();
-        let cycles_start = self.cpu.cycles();
+        let cycles_start = self.cpu.cycles;
         let cycles_end = self.cpu.next_instruction();
         cycles_end - cycles_start
     }
@@ -101,7 +101,7 @@ impl Gameboy {
         if !self
             .debug_status
             .breakpoints
-            .contains(&self.cpu.registers().pc)
+            .contains(&self.cpu.registers.pc)
             && !self.debug_status.should_break
         {
             return;
@@ -109,7 +109,7 @@ impl Gameboy {
         self.debug_status.should_break = false;
         let mut buf = String::new();
         loop {
-            let pc = self.cpu.registers().pc;
+            let pc = self.cpu.registers.pc;
             println!(
                 "Breaked on 0x{pc:04X} (op 0x{:02X})",
                 self.cpu.mmu.read_byte(pc)
@@ -158,9 +158,9 @@ impl Gameboy {
                     // TODO Better debug print
                     println!(
                         "{:X?}\nIE: {:?}\nIF: {:?}\n State: {:?}",
-                        self.cpu.registers(),
-                        self.cpu.mmu.interrupt_enable(),
-                        self.cpu.mmu.interrupt_flags(),
+                        self.cpu.registers,
+                        self.cpu.mmu.interrupt_enable,
+                        self.cpu.mmu.interrupt_flags,
                         self.cpu.execution_state,
                     );
                 }

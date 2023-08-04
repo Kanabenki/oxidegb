@@ -270,6 +270,14 @@ impl Io {
         interrupts
     }
 
+    pub(crate) fn tick_stopped(&mut self) -> FlagSet<Interrupt> {
+        if self.buttons.interrupt_raised {
+            Interrupt::Joypad.into()
+        } else {
+            FlagSet::new_truncated(0)
+        }
+    }
+
     pub(crate) fn read(&self, address: u16) -> u8 {
         use map::*;
         match address {

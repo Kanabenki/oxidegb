@@ -73,13 +73,13 @@ pub(crate) struct Mmu {
     wram: [u8; 8192],
     #[serde(with = "BigArray")]
     hram: [u8; 127],
-    pub(super) apu: Apu,
-    pub(super) ppu: Ppu,
-    pub(super) io: Io,
-    pub(super) cartridge: Cartridge,
+    pub(crate) apu: Apu,
+    pub(crate) ppu: Ppu,
+    pub(crate) io: Io,
+    pub(crate) cartridge: Cartridge,
     dma: Dma,
-    interrupt_flags: FlagSet<Interrupt>,
-    interrupt_enable: FlagSet<Interrupt>,
+    pub(crate) interrupt_flags: FlagSet<Interrupt>,
+    pub(crate) interrupt_enable: FlagSet<Interrupt>,
     ie_value: u8,
 }
 
@@ -144,12 +144,8 @@ impl Mmu {
         }
     }
 
-    pub(crate) const fn interrupt_enable(&self) -> FlagSet<Interrupt> {
-        self.interrupt_enable
-    }
-
-    pub(crate) const fn interrupt_flags(&self) -> FlagSet<Interrupt> {
-        self.interrupt_flags
+    pub(crate) fn tick_stopped(&mut self) {
+        self.interrupt_flags |= self.io.tick_stopped();
     }
 
     pub(crate) fn interrupts(&self) -> FlagSet<Interrupt> {
