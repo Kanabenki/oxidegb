@@ -62,8 +62,8 @@ impl Buttons {
         let nibble_l = match self.current_line {
             InputLine::Directions => self.directions & 0xF,
             InputLine::Buttons => self.buttons & 0xF,
-            InputLine::Both => 0,
-            InputLine::None => (self.buttons | self.directions) & 0xF,
+            InputLine::Both => 0xF,
+            InputLine::None => self.buttons & self.directions & 0xF,
         };
 
         0b1100_0000 | self.current_line as u8 | nibble_l

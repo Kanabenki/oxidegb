@@ -102,7 +102,6 @@ impl Header {
     }
 }
 
-// TODO Refactor low/high bank separation here
 #[enum_dispatch(Mapper)]
 trait MapperOps {
     fn read_rom(&mut self, rom: &[u8], address: u16) -> u8;

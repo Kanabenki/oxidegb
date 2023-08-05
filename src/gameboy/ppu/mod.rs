@@ -152,6 +152,7 @@ impl Ppu {
 
     pub(crate) fn new_post_bootrom() -> Self {
         let mut ppu = Self::new();
+        ppu.lcdc.bg_window_enable = true;
         ppu.lcdc.lcd_enable = true;
         ppu
     }

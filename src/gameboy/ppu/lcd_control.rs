@@ -83,8 +83,8 @@ impl LcdControl {
             bg_window_addressing: TileDataAddressing::Unsigned,
             bg_tile_map: TileMapRange::Low,
             obj_size: SpriteSize::S8x8,
-            obj_enable: true,
-            bg_window_enable: true,
+            obj_enable: false,
+            bg_window_enable: false,
         }
     }
 

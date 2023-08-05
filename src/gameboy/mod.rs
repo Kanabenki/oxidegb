@@ -1,4 +1,3 @@
-// TODO: Refactor API visibility
 mod apu;
 mod cartridge;
 mod cpu;
