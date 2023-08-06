@@ -1,6 +1,7 @@
 use std::{
     fs::{self, File},
     io::{Read, Seek, SeekFrom, Write},
+    mem,
     path::PathBuf,
 };
 
@@ -28,7 +29,8 @@ use oxidegb::gameboy::{Button, Gameboy};
 struct Emulator {
     event_loop: Option<EventLoop<()>>,
     window: Window,
-    pixels: Pixels,
+    // TODO: Remove option once the surface recreation problem is fixed by the pixels crate, or fast forward is handled differently.
+    pixels: Option<Pixels>,
     shift_held: bool,
     tmp_sound_buf: [i16; 2048],
     resampling_bufs: (BlipBuf, BlipBuf),
@@ -38,9 +40,25 @@ struct Emulator {
     rom_path: PathBuf,
     save_file: File,
     delta: u64,
+    fast_forward: bool,
 }
 
 impl Emulator {
+    fn create_pixels(
+        window_width: u32,
+        window_height: u32,
+        window: &Window,
+        vsync: bool,
+    ) -> color_eyre::Result<Pixels> {
+        Ok(PixelsBuilder::new(
+            160,
+            144,
+            SurfaceTexture::new(window_width, window_height, window),
+        )
+        .enable_vsync(vsync)
+        .build()?)
+    }
+
     fn new(
         rom: Vec<u8>,
         bootrom: Option<Vec<u8>>,
@@ -55,14 +73,13 @@ impl Emulator {
             .with_title("Oxidegb")
             .build(&event_loop)?;
 
-        let pixels = {
-            let window_size = window.inner_size();
-            let surface_texture =
-                SurfaceTexture::new(window_size.width, window_size.height, &window);
-            PixelsBuilder::new(160, 144, surface_texture)
-                .enable_vsync(!fast_forward)
-                .build()?
-        };
+        let window_size = window.inner_size();
+        let pixels = Some(Self::create_pixels(
+            window_size.width,
+            window_size.height,
+            &window,
+            !fast_forward,
+        )?);
 
         let mut save_data = vec![];
         save_file.read_to_end(&mut save_data)?;
@@ -125,6 +142,7 @@ impl Emulator {
             window,
             pixels,
             shift_held: false,
+            fast_forward,
             sound_prod,
             tmp_sound_buf: [0; 2048],
             _sound_stream: sound_stream,
@@ -144,11 +162,18 @@ impl Emulator {
             match event {
                 Event::RedrawRequested(_) => {
                     let screen = self.gameboy.screen();
-                    for (i, pixel) in self.pixels.frame_mut().chunks_exact_mut(4).enumerate() {
+                    for (i, pixel) in self
+                        .pixels
+                        .as_mut()
+                        .unwrap()
+                        .frame_mut()
+                        .chunks_exact_mut(4)
+                        .enumerate()
+                    {
                         let color: [u8; 4] = screen[i].into();
                         pixel.copy_from_slice(&color);
                     }
-                    if self.pixels.render().is_err() {
+                    if self.pixels.as_ref().unwrap().render().is_err() {
                         *control_flow = ControlFlow::Exit;
                     }
                 }
@@ -170,6 +195,20 @@ impl Emulator {
                     // TODO: Check how to handle input being pressed during gb frame loop instead of waiting for the end of the frame
                     match event.physical_key {
                         KeyCode::KeyP if set => self.gameboy.debug_break(),
+                        KeyCode::KeyF if set => {
+                            self.fast_forward = !self.fast_forward;
+                            let window_size = self.window.inner_size();
+                            mem::take(&mut self.pixels);
+                            self.pixels = Some(
+                                Self::create_pixels(
+                                    window_size.width,
+                                    window_size.height,
+                                    &self.window,
+                                    !self.fast_forward,
+                                )
+                                .unwrap(),
+                            );
+                        }
                         KeyCode::ArrowUp => self.gameboy.set_button(Button::Up, set),
                         KeyCode::ArrowDown => self.gameboy.set_button(Button::Down, set),
                         KeyCode::ArrowLeft => self.gameboy.set_button(Button::Left, set),
@@ -244,7 +283,11 @@ impl Emulator {
                     window_id,
                     event: WindowEvent::Resized(size),
                 } if window_id == self.window.id() => {
-                    self.pixels.resize_surface(size.width, size.height).unwrap();
+                    self.pixels
+                        .as_mut()
+                        .unwrap()
+                        .resize_surface(size.width, size.height)
+                        .unwrap();
                 }
                 Event::WindowEvent {
                     window_id,
