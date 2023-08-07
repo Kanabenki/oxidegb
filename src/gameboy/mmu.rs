@@ -81,6 +81,7 @@ pub(crate) struct Mmu {
     pub(crate) interrupt_flags: FlagSet<Interrupt>,
     pub(crate) interrupt_enable: FlagSet<Interrupt>,
     ie_value: u8,
+    dma_request: DmaRequest,
 }
 
 impl Mmu {
@@ -105,6 +106,7 @@ impl Mmu {
             interrupt_flags: FlagSet::default(),
             interrupt_enable: FlagSet::default(),
             ie_value: 0,
+            dma_request: DmaRequest::None,
         })
     }
 
@@ -112,12 +114,12 @@ impl Mmu {
         self.apu.tick();
         self.cartridge.tick();
         let io_interrupts = self.io.tick();
-        let (ppu_interrupts, dma) = self.ppu.tick();
+        let (ppu_interrupts, dma_request) = self.ppu.tick();
         self.interrupt_flags |= io_interrupts | ppu_interrupts;
 
-        if let DmaRequest::Start(high_byte) = dma {
+        if let DmaRequest::Start(high_byte) = self.dma_request {
             let base_address = (high_byte as u16) << 8;
-            let stored_value = self.read_byte(base_address);
+            let stored_value = self.read_byte_no_conflict(base_address);
             self.dma = Dma::InProgress {
                 stored_value,
                 offset: 0,
@@ -129,9 +131,9 @@ impl Mmu {
             base_address,
         } = self.dma
         {
-            self.write_byte(map::OAM_START + offset as u16, stored_value);
+            self.write_byte_no_conflict(map::OAM_START + offset as u16, stored_value);
             let offset = offset + 1;
-            let stored_value = self.read_byte(base_address + offset as u16);
+            let stored_value = self.read_byte_no_conflict(base_address + offset as u16);
             self.dma = if offset < Ppu::OAM_SIZE as u8 {
                 Dma::InProgress {
                     stored_value,
@@ -142,6 +144,9 @@ impl Mmu {
                 Dma::None
             };
         }
+
+        // There is a one cycle delay between the DMA request and the actual DMA transfer start.
+        self.dma_request = dma_request;
     }
 
     pub(crate) fn tick_stopped(&mut self) {
@@ -170,10 +175,8 @@ impl Mmu {
     pub(crate) fn reset_interrupt(&mut self, interrupt: Interrupt) {
         self.interrupt_flags &= !interrupt;
     }
-}
 
-impl MemoryOps for Mmu {
-    fn read_byte(&mut self, address: u16) -> u8 {
+    fn read_byte_no_conflict(&mut self, address: u16) -> u8 {
         use map::*;
         match address {
             ROM_START..=ROM_END => self.cartridge.read_rom(address - ROM_START),
@@ -195,7 +198,7 @@ impl MemoryOps for Mmu {
         }
     }
 
-    fn write_byte(&mut self, address: u16, value: u8) {
+    fn write_byte_no_conflict(&mut self, address: u16, value: u8) {
         use map::*;
         match address {
             ROM_START..=ROM_END => self.cartridge.write_rom(address - ROM_START, value),
@@ -224,5 +227,28 @@ impl MemoryOps for Mmu {
                 self.ie_value = value;
             }
         }
+    }
+}
+
+impl MemoryOps for Mmu {
+    // FIXME: Emulating the OAM DMA bus conflict seems to break everything, disabled for now.
+    fn read_byte(&mut self, address: u16) -> u8 {
+        // TODO: Figure out actual conflict interaction between cpu and dma read.
+        //if let Dma::InProgress { .. } = self.dma {
+        //    if !(map::HRAM_START..=map::HRAM_END).contains(&address) {
+        //        return 0xFF;
+        //    }
+        //}
+        self.read_byte_no_conflict(address)
+    }
+
+    fn write_byte(&mut self, address: u16, value: u8) {
+        //// TODO: Figure out actual conflict interaction between cpu and dma write.
+        //if let Dma::InProgress { .. } = self.dma {
+        //    if !(map::HRAM_START..=map::HRAM_END).contains(&address) {
+        //        return;
+        //    }
+        //}
+        self.write_byte_no_conflict(address, value);
     }
 }
