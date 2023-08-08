@@ -103,7 +103,7 @@ impl Header {
 }
 
 #[enum_dispatch(Mapper)]
-trait MapperOps {
+pub(crate) trait MapperOps {
     fn read_rom(&mut self, rom: &[u8], address: u16) -> u8;
     fn write_rom(&mut self, rom: &mut [u8], address: u16, value: u8);
     fn read_ram(&mut self, ram: &[u8], address: u16) -> u8;
@@ -143,7 +143,7 @@ pub(crate) struct Cartridge {
     pub(crate) bootrom_enabled: bool,
     #[serde(skip)]
     pub(crate) rom: Vec<u8>,
-    ram: Vec<u8>,
+    pub(crate) ram: Vec<u8>,
 }
 
 impl Cartridge {
@@ -162,6 +162,9 @@ impl Cartridge {
         let ram = if let Some(save) = save {
             if save.len() != ram_size {
                 return Err(Error::InvalidSave);
+            }
+            if !mapper.can_save() {
+                return Err(Error::SaveNotSupported);
             }
             save
         } else {

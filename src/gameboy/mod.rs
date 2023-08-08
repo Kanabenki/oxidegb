@@ -16,6 +16,8 @@ use cpu::Cpu;
 
 pub use io::Button;
 
+use self::cartridge::MapperOps;
+
 #[derive(Serialize, Deserialize)]
 struct DebugStatus {
     breakpoints: Vec<u16>,
@@ -57,6 +59,10 @@ impl Gameboy {
 
     pub fn samples(&mut self) -> ([i16; 6], [i16; 6], usize) {
         self.cpu.mmu.apu.samples()
+    }
+
+    pub fn can_save(&self) -> bool {
+        self.cpu.mmu.cartridge.mapper.can_save()
     }
 
     pub fn save_data(&self) -> Option<&[u8]> {

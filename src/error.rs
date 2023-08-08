@@ -5,6 +5,7 @@ pub enum Error {
     MissingBootrom,
     InvalidBootRom,
     InvalidSave,
+    SaveNotSupported,
     InvalidRomHeader(&'static str),
     UnsupportedMapper(u8),
 }
@@ -18,6 +19,7 @@ impl Display for Error {
                 f,
                 "save size does not match the size expected by the loaded rom"
             ),
+            Self::SaveNotSupported => write!(f, "the current rom does not support save data"),
             Self::InvalidRomHeader(reason) => {
                 write!(f, "rom header cannot be parsed ({reason})")
             }

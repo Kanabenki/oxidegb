@@ -1,6 +1,6 @@
 use std::{
-    fs::{self, File},
-    io::{Read, Seek, SeekFrom, Write},
+    fs::{self, File, OpenOptions},
+    io::{self, Read, Seek, SeekFrom, Write},
     mem,
     path::PathBuf,
 };
@@ -38,7 +38,7 @@ struct Emulator {
     _sound_stream: Stream,
     gameboy: Gameboy,
     rom_path: PathBuf,
-    save_file: File,
+    save_file: Option<File>,
     delta: u64,
     fast_forward: bool,
 }
@@ -63,7 +63,7 @@ impl Emulator {
         rom: Vec<u8>,
         bootrom: Option<Vec<u8>>,
         rom_path: PathBuf,
-        mut save_file: File,
+        save_path: Option<PathBuf>,
         fast_forward: bool,
         debug: bool,
     ) -> color_eyre::Result<Self> {
@@ -81,14 +81,38 @@ impl Emulator {
             !fast_forward,
         )?);
 
-        let mut save_data = vec![];
-        save_file.read_to_end(&mut save_data)?;
-        let save_data = if !save_data.is_empty() {
-            Some(save_data)
+        let save_path = save_path.unwrap_or_else(|| rom_path.with_extension("sav"));
+        let mut save_file = OpenOptions::new();
+        let file_res = save_file.read(true).write(true).open(&save_path);
+        let (save_data, save_file) = match file_res {
+            Ok(mut save_file) => {
+                let mut save_data = vec![];
+                save_file.read_to_end(&mut save_data)?;
+                (Some(save_data), Some(save_file))
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => (None, None),
+            Err(error) => return Err(error.into()),
+        };
+
+        let gameboy = Gameboy::new(rom, bootrom, save_data, debug)?;
+
+        let save_file = if gameboy.can_save() {
+            if save_file.is_some() {
+                save_file
+            } else {
+                let mut save_file = OpenOptions::new();
+                Some(
+                    save_file
+                        .read(true)
+                        .write(true)
+                        .create(true)
+                        .open(&save_path)?,
+                )
+            }
         } else {
             None
         };
-        let gameboy = Gameboy::new(rom, bootrom, save_data, debug)?;
+
         let event_loop = Some(event_loop);
 
         let sample_rate_out = 44100;
@@ -294,14 +318,16 @@ impl Emulator {
                     event: WindowEvent::CloseRequested,
                 } if window_id == self.window.id() => {
                     if let Some(save_data) = self.gameboy.save_data() {
-                        let len = save_data.len();
+                        if let Some(save_file) = self.save_file.as_mut() {
+                            let len = save_data.len();
 
-                        if let Err(error) = (|| {
-                            self.save_file.seek(SeekFrom::Start(0))?;
-                            self.save_file.write_all(save_data)?;
-                            self.save_file.set_len(len as u64)
-                        })() {
-                            eprintln!("{error:?}");
+                            if let Err(error) = (|| {
+                                save_file.seek(SeekFrom::Start(0))?;
+                                save_file.write_all(save_data)?;
+                                save_file.set_len(len as u64)
+                            })() {
+                                eprintln!("{error:?}");
+                            }
                         }
                     }
                     *control_flow = ControlFlow::Exit;
@@ -381,18 +407,12 @@ fn main() -> color_eyre::Result<()> {
     let bootrom = arguments
         .bootrom_file
         .map_or(Ok(None), |bootrom_file| fs::read(bootrom_file).map(Some))?;
-    let mut save_open_options = fs::OpenOptions::new();
-    save_open_options.read(true).write(true).create(true);
-    let save = arguments.save_file.map_or_else(
-        || save_open_options.open(arguments.file.with_extension("sav")),
-        |save_file| save_open_options.open(save_file),
-    )?;
 
     let emulator = Emulator::new(
         rom,
         bootrom,
         arguments.file,
-        save,
+        arguments.save_file,
         arguments.fast_forward,
         arguments.debug,
     )?;
