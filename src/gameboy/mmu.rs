@@ -62,8 +62,8 @@ pub(crate) trait MemoryOps {
 
     fn write_dbyte(&mut self, address: u16, value: u16) {
         let [high, low] = value.to_be_bytes();
-        self.write_byte(address, low);
         self.write_byte(address + 1, high);
+        self.write_byte(address, low);
     }
 }
 
@@ -146,6 +146,7 @@ impl Mmu {
         }
 
         // There is a one cycle delay between the DMA request and the actual DMA transfer start.
+        // TODO: Check timing.
         self.dma_request = dma_request;
     }
 

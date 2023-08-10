@@ -1,7 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Seek, SeekFrom, Write},
-    mem,
     path::PathBuf,
 };
 
@@ -20,7 +19,7 @@ use ringbuf::{HeapProducer, HeapRb};
 use winit::{
     event::{ElementState, Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    keyboard::KeyCode,
+    keyboard::{KeyCode, ModifiersState},
     window::{Window, WindowBuilder},
 };
 
@@ -29,9 +28,8 @@ use oxidegb::gameboy::{Button, Gameboy};
 struct Emulator {
     event_loop: Option<EventLoop<()>>,
     window: Window,
-    // TODO: Remove option once the surface recreation problem is fixed by the pixels crate, or fast forward is handled differently.
-    pixels: Option<Pixels>,
-    shift_held: bool,
+    pixels: Pixels,
+    modifiers: ModifiersState,
     tmp_sound_buf: [i16; 2048],
     resampling_bufs: (BlipBuf, BlipBuf),
     sound_prod: HeapProducer<i16>,
@@ -44,21 +42,6 @@ struct Emulator {
 }
 
 impl Emulator {
-    fn create_pixels(
-        window_width: u32,
-        window_height: u32,
-        window: &Window,
-        vsync: bool,
-    ) -> color_eyre::Result<Pixels> {
-        Ok(PixelsBuilder::new(
-            160,
-            144,
-            SurfaceTexture::new(window_width, window_height, window),
-        )
-        .enable_vsync(vsync)
-        .build()?)
-    }
-
     fn new(
         rom: Vec<u8>,
         bootrom: Option<Vec<u8>>,
@@ -74,12 +57,13 @@ impl Emulator {
             .build(&event_loop)?;
 
         let window_size = window.inner_size();
-        let pixels = Some(Self::create_pixels(
-            window_size.width,
-            window_size.height,
-            &window,
-            !fast_forward,
-        )?);
+        let pixels = PixelsBuilder::new(
+            160,
+            144,
+            SurfaceTexture::new(window_size.width, window_size.height, &window),
+        )
+        .enable_vsync(!fast_forward)
+        .build()?;
 
         let save_path = save_path.unwrap_or_else(|| rom_path.with_extension("sav"));
         let mut save_file = OpenOptions::new();
@@ -165,7 +149,7 @@ impl Emulator {
             event_loop,
             window,
             pixels,
-            shift_held: false,
+            modifiers: ModifiersState::empty(),
             fast_forward,
             sound_prod,
             tmp_sound_buf: [0; 2048],
@@ -186,18 +170,11 @@ impl Emulator {
             match event {
                 Event::RedrawRequested(_) => {
                     let screen = self.gameboy.screen();
-                    for (i, pixel) in self
-                        .pixels
-                        .as_mut()
-                        .unwrap()
-                        .frame_mut()
-                        .chunks_exact_mut(4)
-                        .enumerate()
-                    {
+                    for (i, pixel) in self.pixels.frame_mut().chunks_exact_mut(4).enumerate() {
                         let color: [u8; 4] = screen[i].into();
                         pixel.copy_from_slice(&color);
                     }
-                    if self.pixels.as_ref().unwrap().render().is_err() {
+                    if self.pixels.render().is_err() {
                         *control_flow = ControlFlow::Exit;
                     }
                 }
@@ -205,7 +182,7 @@ impl Emulator {
                     event: WindowEvent::ModifiersChanged(modifiers),
                     ..
                 } => {
-                    self.shift_held = modifiers.state().shift_key();
+                    self.modifiers = modifiers.state();
                 }
                 Event::WindowEvent {
                     event: WindowEvent::KeyboardInput { event, .. },
@@ -221,17 +198,7 @@ impl Emulator {
                         KeyCode::KeyP if set => self.gameboy.debug_break(),
                         KeyCode::KeyF if set => {
                             self.fast_forward = !self.fast_forward;
-                            let window_size = self.window.inner_size();
-                            mem::take(&mut self.pixels);
-                            self.pixels = Some(
-                                Self::create_pixels(
-                                    window_size.width,
-                                    window_size.height,
-                                    &self.window,
-                                    !self.fast_forward,
-                                )
-                                .unwrap(),
-                            );
+                            self.pixels.enable_vsync(!self.fast_forward);
                         }
                         KeyCode::ArrowUp => self.gameboy.set_button(Button::Up, set),
                         KeyCode::ArrowDown => self.gameboy.set_button(Button::Down, set),
@@ -266,7 +233,7 @@ impl Emulator {
                             .rom_path
                             .with_file_name(savestate_filename)
                             .with_extension("oxidegb");
-                        if self.shift_held {
+                        if self.modifiers == ModifiersState::SHIFT {
                             let load_res: Result<(), eyre::Error> = (|| {
                                 let savestate = File::open(savestate_path).wrap_err_with(|| {
                                     format!("Cannot load savestate {index} file")
@@ -283,7 +250,7 @@ impl Emulator {
                                 Ok(()) => self.window.request_redraw(),
                                 Err(error) => eprintln!("{error:?}"),
                             }
-                        } else {
+                        } else if self.modifiers.is_empty() {
                             let save_res: Result<(), eyre::Error> = (|| {
                                 ciborium::into_writer(
                                     &self.gameboy,
@@ -307,11 +274,7 @@ impl Emulator {
                     window_id,
                     event: WindowEvent::Resized(size),
                 } if window_id == self.window.id() => {
-                    self.pixels
-                        .as_mut()
-                        .unwrap()
-                        .resize_surface(size.width, size.height)
-                        .unwrap();
+                    self.pixels.resize_surface(size.width, size.height).unwrap();
                 }
                 Event::WindowEvent {
                     window_id,
