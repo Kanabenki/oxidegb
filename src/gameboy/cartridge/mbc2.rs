@@ -65,7 +65,7 @@ impl MapperOps for Mbc2 {
         }
     }
 
-    fn can_save(&self) -> bool {
+    fn has_battery(&self) -> bool {
         self.has_battery
     }
 }

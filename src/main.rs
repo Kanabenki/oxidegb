@@ -280,19 +280,26 @@ impl Emulator {
                     window_id,
                     event: WindowEvent::CloseRequested,
                 } if window_id == self.window.id() => {
-                    if let Some(save_data) = self.gameboy.save_data() {
+                    if self.gameboy.can_save() {
+                        let save_data = self.gameboy.save_data();
+                        let len = save_data.ram.map_or(0, |ram| ram.len())
+                            + save_data.rtc.as_ref().map_or(0, |rtc| rtc.len());
                         if let Some(save_file) = self.save_file.as_mut() {
-                            let len = save_data.len();
-
                             if let Err(error) = (|| {
                                 save_file.seek(SeekFrom::Start(0))?;
-                                save_file.write_all(save_data)?;
+                                if let Some(ram) = save_data.ram {
+                                    save_file.write_all(ram)?;
+                                }
+                                if let Some(rtc) = save_data.rtc {
+                                    save_file.write_all(&rtc)?;
+                                }
                                 save_file.set_len(len as u64)
                             })() {
                                 eprintln!("{error:?}");
                             }
                         }
                     }
+
                     *control_flow = ControlFlow::Exit;
                 }
                 Event::MainEventsCleared => {

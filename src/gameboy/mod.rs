@@ -16,7 +16,7 @@ use cpu::Cpu;
 
 pub use io::Button;
 
-use self::cartridge::MapperOps;
+use self::cartridge::{MapperOps, SaveData};
 
 #[derive(Serialize, Deserialize)]
 struct DebugStatus {
@@ -62,10 +62,10 @@ impl Gameboy {
     }
 
     pub fn can_save(&self) -> bool {
-        self.cpu.mmu.cartridge.mapper.can_save()
+        self.cpu.mmu.cartridge.mapper.has_battery()
     }
 
-    pub fn save_data(&self) -> Option<&[u8]> {
+    pub fn save_data(&self) -> SaveData {
         self.cpu.mmu.cartridge.save_data()
     }
 

@@ -18,3 +18,5 @@ blip_buf = "0.1.4"
 serde = { version = "1.0.180", features = ["derive"] }
 serde-big-array = "0.5.1"
 ciborium = "0.2.1"
+nom = "7.1.3"
+cookie-factory = "0.3.2"

@@ -1,11 +1,16 @@
-use serde::{Deserialize, Serialize};
+use std::{
+    io,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use crate::gameboy::Gameboy;
+use cookie_factory as cf;
+use serde::{Deserialize, Serialize};
 
 use super::{
     MapperOps, HIGH_BANK_END, HIGH_BANK_START, LOW_BANK_END, LOW_BANK_START, RAM_BANK_SIZE,
     ROM_BANK_SIZE,
 };
+use crate::gameboy::Gameboy;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Mbc3 {
@@ -22,13 +27,43 @@ pub struct Mbc3 {
     cycles: usize,
 }
 
-// TODO: Fetch current time and save/restore once save are implemented
 #[derive(Serialize, Deserialize, Default, Debug, Clone, Copy)]
 struct RtcRegisters {
     seconds: u8,
     minutes: u8,
     hours: u8,
     days: u16,
+    carry: bool,
+    halt: bool,
+}
+
+impl RtcRegisters {
+    fn _parse(_input: &[u8]) -> nom::IResult<&[u8], Self> {
+        todo!()
+    }
+
+    fn serialize<W>(&self) -> impl cf::SerializeFn<W>
+    where
+        W: io::Write,
+    {
+        cf::sequence::tuple((
+            cf::bytes::le_u32(self.seconds as u32),
+            cf::bytes::le_u32(self.minutes as u32),
+            cf::bytes::le_u32(self.hours as u32),
+            cf::bytes::le_u32((self.days & 0xFF) as u32),
+            cf::bytes::le_u32((self.days >> 8) as u32),
+        ))
+    }
+
+    fn days_high_byte(&self) -> u8 {
+        (self.days >> 8) as u8 & 0b1 | (self.halt as u8) << 6 | (self.carry as u8) << 7
+    }
+
+    fn set_days_high_byte(&mut self, value: u8) {
+        self.days = (self.days & 0x00FF) | ((value as u16 & 1) << 8);
+        self.carry = value >> 7 != 0;
+        self.halt = (value >> 6) & 1 != 0;
+    }
 }
 
 impl Mbc3 {
@@ -62,6 +97,35 @@ impl Mbc3 {
             rtc_carry: false,
             cycles: 0,
         }
+    }
+
+    // See https://bgb.bircd.org/rtcsave.html for the format.
+    pub(crate) fn _set_rtc_data(&mut self, _rtc_data: &[u8]) {
+        todo!()
+    }
+
+    pub(crate) fn rtc_data(&self) -> Option<Vec<u8>> {
+        if !self.has_rtc {
+            return None;
+        }
+
+        let mut buf: Vec<u8> = vec![];
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        cf::gen(
+            cf::sequence::tuple((
+                self.current_time.serialize(),
+                self.latched_time
+                    .unwrap_or(RtcRegisters::default())
+                    .serialize(),
+                cf::bytes::le_u64(timestamp),
+            )),
+            &mut buf,
+        )
+        .unwrap();
+        Some(buf)
     }
 }
 
@@ -108,11 +172,7 @@ impl MapperOps for Mbc3 {
             Self::RTC_MINUTES_REG if self.has_rtc => time.minutes,
             Self::RTC_HOURS_REG if self.has_rtc => time.hours,
             Self::RTC_DAY_LOW_REG if self.has_rtc => time.days as u8,
-            Self::RTC_DAY_HIGH_REG if self.has_rtc => {
-                (time.days >> 8) as u8 & 0b1
-                    | (self.rtc_halt as u8) << 6
-                    | (self.rtc_carry as u8) << 7
-            }
+            Self::RTC_DAY_HIGH_REG if self.has_rtc => time.days_high_byte(),
             _ => 0xFF,
         }
     }
@@ -130,11 +190,7 @@ impl MapperOps for Mbc3 {
             Self::RTC_MINUTES_REG => self.current_time.minutes = value,
             Self::RTC_HOURS_REG => self.current_time.hours = value,
             Self::RTC_DAY_LOW_REG => self.current_time.days &= 0xFF00 | value as u16,
-            Self::RTC_DAY_HIGH_REG => {
-                self.current_time.days &= 0x00FF | ((value as u16 & 1) << 8);
-                self.rtc_carry = value >> 7 != 0;
-                self.rtc_halt = (value >> 6) & 1 != 0;
-            }
+            Self::RTC_DAY_HIGH_REG => self.current_time.set_days_high_byte(value),
             _ => {}
         }
     }
@@ -167,7 +223,7 @@ impl MapperOps for Mbc3 {
         }
     }
 
-    fn can_save(&self) -> bool {
+    fn has_battery(&self) -> bool {
         self.has_battery
     }
 }

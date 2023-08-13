@@ -109,9 +109,15 @@ pub(crate) trait MapperOps {
     fn read_ram(&mut self, ram: &[u8], address: u16) -> u8;
     fn write_ram(&mut self, rom: &mut [u8], address: u16, value: u8);
     fn tick(&mut self) {}
-    fn can_save(&self) -> bool {
+    fn has_battery(&self) -> bool {
         false
     }
+}
+
+#[derive(Debug, Default)]
+pub struct SaveData<'a> {
+    pub ram: Option<&'a [u8]>,
+    pub rtc: Option<Vec<u8>>,
 }
 
 #[enum_dispatch]
@@ -163,7 +169,7 @@ impl Cartridge {
             if save.len() != ram_size {
                 return Err(Error::InvalidSave);
             }
-            if !mapper.can_save() {
+            if !mapper.has_battery() {
                 return Err(Error::SaveNotSupported);
             }
             save
@@ -221,11 +227,18 @@ impl Cartridge {
         self.mapper.write_ram(&mut self.ram, address, value);
     }
 
-    pub(crate) fn save_data(&self) -> Option<&[u8]> {
-        if self.mapper.can_save() {
-            Some(&self.ram)
+    pub(crate) fn save_data(&self) -> SaveData {
+        if !self.mapper.has_battery() {
+            return SaveData::default();
+        }
+
+        let ram = (!self.ram.is_empty()).then_some(&self.ram[..]);
+        let rtc = if let Mapper::Mbc3(mapper) = &self.mapper {
+            mapper.rtc_data()
         } else {
             None
-        }
+        };
+
+        SaveData { ram, rtc }
     }
 }

@@ -494,6 +494,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cookie-factory"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "396de984970346b0d9e93d1415082923c679e5ae5c3ee3dcbd104f5610af126b"
+
+[[package]]
 name = "core-foundation"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1360,9 +1366,11 @@ dependencies = [
  "ciborium",
  "clap",
  "color-eyre",
+ "cookie-factory",
  "cpal",
  "enum_dispatch",
  "flagset",
+ "nom",
  "pixels",
  "ringbuf",
  "serde",
