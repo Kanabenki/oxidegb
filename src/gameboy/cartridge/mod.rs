@@ -169,13 +169,12 @@ impl Cartridge {
                 return Err(Error::SaveNotSupported);
             }
             if let Mapper::Mbc3(mapper) = &mut mapper {
-                if save.len() == ram_size + 48
-                    && mapper.has_rtc()
-                    && mapper.set_rtc_data(&save[ram_size..]).is_ok()
-                {
-                    save.truncate(ram_size);
-                } else {
-                    return Err(Error::InvalidRtcData);
+                if save.len() == ram_size + 48 && mapper.has_rtc() {
+                    if mapper.set_rtc_data(&save[ram_size..]).is_ok() {
+                        save.truncate(ram_size);
+                    } else {
+                        return Err(Error::InvalidRtcData);
+                    }
                 }
             }
             if save.len() != ram_size {
