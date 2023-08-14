@@ -152,7 +152,7 @@ impl Mbc3 {
             self.current_time.days +=
                 u16::min((delta / 86400) as u16, 0b1_1111_1111) + u16::from(carry);
             if self.current_time.days > 0b1_1111_1111 {
-                self.current_time.days = 0b1_1111_1111;
+                self.current_time.days -= 0b1_1111_1111;
                 self.current_time.carry = true;
             }
         }
@@ -247,10 +247,12 @@ impl MapperOps for Mbc3 {
             0..=Self::MAX_RAM_BANK_SELECT => {
                 ram[address as usize + self.ram_bank_rtc_select as usize * RAM_BANK_SIZE] = value
             }
-            Self::RTC_SECONDS_REG => self.current_time.seconds = value,
-            Self::RTC_MINUTES_REG => self.current_time.minutes = value,
-            Self::RTC_HOURS_REG => self.current_time.hours = value,
-            Self::RTC_DAY_LOW_REG => self.current_time.days &= 0xFF00 | value as u16,
+            Self::RTC_SECONDS_REG => self.current_time.seconds = value & 0b11_1111,
+            Self::RTC_MINUTES_REG => self.current_time.minutes = value & 0b11_1111,
+            Self::RTC_HOURS_REG => self.current_time.hours = value & 0b1_1111,
+            Self::RTC_DAY_LOW_REG => {
+                self.current_time.days = (self.current_time.days & 0xFF00) | value as u16
+            }
             Self::RTC_DAY_HIGH_REG => self.current_time.set_days_high_byte(value),
             _ => {}
         }
@@ -260,25 +262,32 @@ impl MapperOps for Mbc3 {
         if !self.has_rtc || self.current_time.halt {
             self.cycles = 0;
         } else {
+            let time = &mut self.current_time;
             self.cycles += 1;
             if self.cycles == Gameboy::CYCLES_PER_SECOND as usize / 4 {
                 self.cycles = 0;
-                self.current_time.seconds += 1;
-                if self.current_time.seconds == 60 {
-                    self.current_time.seconds = 0;
-                    self.current_time.minutes += 1;
-                    if self.current_time.minutes == 60 {
-                        self.current_time.minutes = 0;
-                        self.current_time.hours += 1;
-                        if self.current_time.hours == 24 {
-                            self.current_time.hours = 0;
-                            self.current_time.days += 1;
-                            if self.current_time.days == 0b1_1111_1111 {
-                                self.current_time.days = 0;
-                                self.current_time.carry = true;
+                time.seconds += 1;
+                if time.seconds == 60 {
+                    time.seconds = 0;
+                    time.minutes += 1;
+                    if time.minutes == 60 {
+                        time.minutes = 0;
+                        time.hours += 1;
+                        if time.hours == 24 {
+                            time.hours = 0;
+                            time.days += 1;
+                            if time.days > 0b1_1111_1111 {
+                                time.days = 0;
+                                time.carry = true;
                             }
+                        } else if time.hours == 0b10_0000 {
+                            time.hours = 0;
                         }
+                    } else if time.minutes == 0b100_0000 {
+                        time.minutes = 0;
                     }
+                } else if time.seconds == 0b100_0000 {
+                    time.seconds = 0;
                 }
             }
         }

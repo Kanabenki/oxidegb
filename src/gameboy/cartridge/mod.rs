@@ -32,14 +32,13 @@ impl Header {
             return Err(Error::InvalidRomHeader("Header is too short"));
         }
 
-        let title = String::from_utf8(
+        let title = String::from_utf8_lossy(
             rom_bytes[0x0134..=0x143]
                 .splitn(2, |byte| *byte == 0)
                 .next()
-                .unwrap()
-                .to_owned(),
+                .unwrap(),
         )
-        .map_err(|_| Error::InvalidRomHeader("Could not parse title"))?;
+        .to_string();
 
         let rom_bank_count = match rom_bytes[0x148] {
             rom_bank_byte @ 0x00..=0x08 => 2 << rom_bank_byte,
