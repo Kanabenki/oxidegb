@@ -1375,6 +1375,7 @@ dependencies = [
  "ringbuf",
  "serde",
  "serde-big-array",
+ "thiserror",
  "winit",
 ]
 

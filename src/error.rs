@@ -1,31 +1,17 @@
-use std::{error::Error as StdError, fmt::Display};
-
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("bootrom is enabled but no bootrom was provided")]
     MissingBootrom,
+    #[error("bootrom size isn't 0x100 bytes")]
     InvalidBootRom,
+    #[error("save size does not match the size expected by the loaded rom")]
     InvalidSave,
+    #[error("failed to parse saved rtc data")]
+    InvalidRtcData,
+    #[error("the current rom does not support save data")]
     SaveNotSupported,
+    #[error("rom header cannot be parsed ({0})")]
     InvalidRomHeader(&'static str),
+    #[error("unsupported rom mapper id {0}")]
     UnsupportedMapper(u8),
 }
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::MissingBootrom => write!(f, "bootrom is enabled but no bootrom was provided"),
-            Self::InvalidBootRom => write!(f, "bootrom size isn't 0x100 bytes"),
-            Self::InvalidSave => write!(
-                f,
-                "save size does not match the size expected by the loaded rom"
-            ),
-            Self::SaveNotSupported => write!(f, "the current rom does not support save data"),
-            Self::InvalidRomHeader(reason) => {
-                write!(f, "rom header cannot be parsed ({reason})")
-            }
-            Self::UnsupportedMapper(id) => write!(f, "unsupported rom mapper id {id}"),
-        }
-    }
-}
-
-impl StdError for Error {}

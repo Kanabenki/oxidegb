@@ -21,9 +21,8 @@ pub struct Mbc3 {
     ram_bank_rtc_select: u8,
     ram_rtc_enabled: bool,
     current_time: RtcRegisters,
-    latched_time: Option<RtcRegisters>,
-    rtc_halt: bool,
-    rtc_carry: bool,
+    latched_time: RtcRegisters,
+    latch_toggle: bool,
     cycles: usize,
 }
 
@@ -38,8 +37,22 @@ struct RtcRegisters {
 }
 
 impl RtcRegisters {
-    fn _parse(_input: &[u8]) -> nom::IResult<&[u8], Self> {
-        todo!()
+    fn parse(input: &[u8]) -> nom::IResult<&[u8], Self> {
+        let (input, seconds) = nom::number::complete::le_u32(input)?;
+        let (input, minutes) = nom::number::complete::le_u32(input)?;
+        let (input, hours) = nom::number::complete::le_u32(input)?;
+        let (input, days_low) = nom::number::complete::le_u32(input)?;
+        let (input, days_high) = nom::number::complete::le_u32(input)?;
+        let mut regs = Self {
+            seconds: seconds as u8,
+            minutes: minutes as u8,
+            hours: hours as u8,
+            days: days_low as u16,
+            carry: false,
+            halt: false,
+        };
+        regs.set_days_high_byte(days_high as u8);
+        Ok((input, regs))
     }
 
     fn serialize<W>(&self) -> impl cf::SerializeFn<W>
@@ -92,16 +105,59 @@ impl Mbc3 {
             ram_bank_rtc_select: 0,
             ram_rtc_enabled: false,
             current_time: RtcRegisters::default(),
-            latched_time: None,
-            rtc_halt: false,
-            rtc_carry: false,
+            latched_time: RtcRegisters::default(),
+            latch_toggle: false,
             cycles: 0,
         }
     }
 
     // See https://bgb.bircd.org/rtcsave.html for the format.
-    pub(crate) fn _set_rtc_data(&mut self, _rtc_data: &[u8]) {
-        todo!()
+    pub(crate) fn set_rtc_data<'a>(&mut self, rtc_data: &'a [u8]) -> nom::IResult<&'a [u8], ()> {
+        if !self.has_rtc {
+            return Ok((rtc_data, ()));
+        }
+
+        let (input, current_time) = RtcRegisters::parse(rtc_data)?;
+        let (input, latched_time) = RtcRegisters::parse(input)?;
+        let (input, timestamp) = nom::number::complete::le_u64(input)?;
+        let timestamp_now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        self.current_time = current_time;
+        self.latched_time = latched_time;
+        if timestamp_now > timestamp && !self.current_time.halt {
+            let carry_add = |a: u8, b, prev_carry| {
+                let (sum, carry) = a.overflowing_add(b);
+                let (sum, carry2) = sum.overflowing_add(u8::from(prev_carry));
+                (sum, carry | carry2)
+            };
+
+            let delta = timestamp_now - timestamp;
+            let (seconds, carry) = ((delta % 60) as u8).overflowing_add(self.current_time.seconds);
+            self.current_time.seconds = seconds;
+            let (minutes, carry) = carry_add(
+                ((delta % 3600) / 60) as u8,
+                self.current_time.minutes,
+                carry,
+            );
+            self.current_time.minutes = minutes;
+            let (hours, carry) = carry_add(
+                ((delta % 86400) / 3600) as u8,
+                self.current_time.hours,
+                carry,
+            );
+            self.current_time.hours = hours;
+            self.current_time.days +=
+                u16::min((delta / 86400) as u16, 0b1_1111_1111) + u16::from(carry);
+            if self.current_time.days > 0b1_1111_1111 {
+                self.current_time.days = 0b1_1111_1111;
+                self.current_time.carry = true;
+            }
+        }
+
+        Ok((input, ()))
     }
 
     pub(crate) fn rtc_data(&self) -> Option<Vec<u8>> {
@@ -117,15 +173,17 @@ impl Mbc3 {
         cf::gen(
             cf::sequence::tuple((
                 self.current_time.serialize(),
-                self.latched_time
-                    .unwrap_or(RtcRegisters::default())
-                    .serialize(),
+                self.latched_time.serialize(),
                 cf::bytes::le_u64(timestamp),
             )),
             &mut buf,
         )
         .unwrap();
         Some(buf)
+    }
+
+    pub(crate) fn has_rtc(&self) -> bool {
+        self.has_rtc
     }
 }
 
@@ -152,7 +210,11 @@ impl MapperOps for Mbc3 {
                 self.ram_bank_rtc_select = value & 0x0F;
             }
             Self::RTC_LATCH_START..=Self::RTC_LATCH_END => {
-                self.latched_time = (value & 1 != 0).then_some(self.current_time);
+                let set = (value & 1) != 0;
+                if !self.latch_toggle && set {
+                    self.latched_time = self.current_time;
+                }
+                self.latch_toggle = set;
             }
             _ => panic!("Tried to write Mbc3 rom out of range"),
         }
@@ -163,16 +225,15 @@ impl MapperOps for Mbc3 {
             return 0xFF;
         }
 
-        let time = self.latched_time.unwrap_or(self.current_time);
         match self.ram_bank_rtc_select {
             0..=Self::MAX_RAM_BANK_SELECT if self.has_ram => {
                 ram[address as usize + self.ram_bank_rtc_select as usize * RAM_BANK_SIZE]
             }
-            Self::RTC_SECONDS_REG if self.has_rtc => time.seconds,
-            Self::RTC_MINUTES_REG if self.has_rtc => time.minutes,
-            Self::RTC_HOURS_REG if self.has_rtc => time.hours,
-            Self::RTC_DAY_LOW_REG if self.has_rtc => time.days as u8,
-            Self::RTC_DAY_HIGH_REG if self.has_rtc => time.days_high_byte(),
+            Self::RTC_SECONDS_REG if self.has_rtc => self.latched_time.seconds,
+            Self::RTC_MINUTES_REG if self.has_rtc => self.latched_time.minutes,
+            Self::RTC_HOURS_REG if self.has_rtc => self.latched_time.hours,
+            Self::RTC_DAY_LOW_REG if self.has_rtc => self.latched_time.days as u8,
+            Self::RTC_DAY_HIGH_REG if self.has_rtc => self.latched_time.days_high_byte(),
             _ => 0xFF,
         }
     }
@@ -196,7 +257,7 @@ impl MapperOps for Mbc3 {
     }
 
     fn tick(&mut self) {
-        if !self.has_rtc || self.rtc_halt {
+        if !self.has_rtc || self.current_time.halt {
             self.cycles = 0;
         } else {
             self.cycles += 1;
@@ -214,7 +275,7 @@ impl MapperOps for Mbc3 {
                             self.current_time.days += 1;
                             if self.current_time.days == 0b1_1111_1111 {
                                 self.current_time.days = 0;
-                                self.rtc_carry = true;
+                                self.current_time.carry = true;
                             }
                         }
                     }

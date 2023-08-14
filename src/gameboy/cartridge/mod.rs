@@ -158,20 +158,31 @@ impl Cartridge {
         bootrom: Option<Vec<u8>>,
         save: Option<Vec<u8>>,
     ) -> Result<Self, Error> {
-        let (header, mapper) = Header::parse(&rom)?;
+        let (header, mut mapper) = Header::parse(&rom)?;
         // Mbc2 has 512 half-bytes of internal RAM that are not reported in the header.
         let ram_size = if let Mapper::Mbc2(_) = mapper {
             Mbc2::RAM_SIZE
         } else {
             header.ram_size as usize
         };
-        let ram = if let Some(save) = save {
-            if save.len() != ram_size {
-                return Err(Error::InvalidSave);
-            }
+        let ram = if let Some(mut save) = save {
             if !mapper.has_battery() {
                 return Err(Error::SaveNotSupported);
             }
+            if let Mapper::Mbc3(mapper) = &mut mapper {
+                if save.len() == ram_size + 48
+                    && mapper.has_rtc()
+                    && mapper.set_rtc_data(&save[ram_size..]).is_ok()
+                {
+                    save.truncate(ram_size);
+                } else {
+                    return Err(Error::InvalidRtcData);
+                }
+            }
+            if save.len() != ram_size {
+                return Err(Error::InvalidSave);
+            }
+
             save
         } else {
             vec![0; ram_size]
