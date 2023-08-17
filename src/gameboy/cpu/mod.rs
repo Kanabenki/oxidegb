@@ -78,7 +78,10 @@ impl Cpu {
                     self.execution_state = ExecutionState::Continue;
                 }
             }
-            ExecutionState::IllegalInstruction => return self.cycles,
+            ExecutionState::IllegalInstruction => {
+                self.tick();
+                return self.cycles;
+            }
         }
 
         if self.registers.ime {

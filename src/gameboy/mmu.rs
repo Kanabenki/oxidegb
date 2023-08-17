@@ -81,7 +81,6 @@ pub(crate) struct Mmu {
     pub(crate) interrupt_flags: FlagSet<Interrupt>,
     pub(crate) interrupt_enable: FlagSet<Interrupt>,
     ie_value: u8,
-    dma_request: DmaRequest,
 }
 
 impl Mmu {
@@ -106,7 +105,6 @@ impl Mmu {
             interrupt_flags: FlagSet::default(),
             interrupt_enable: FlagSet::default(),
             ie_value: 0,
-            dma_request: DmaRequest::None,
         })
     }
 
@@ -117,7 +115,7 @@ impl Mmu {
         let (ppu_interrupts, dma_request) = self.ppu.tick();
         self.interrupt_flags |= io_interrupts | ppu_interrupts;
 
-        if let DmaRequest::Start(high_byte) = self.dma_request {
+        if let DmaRequest::Start(high_byte) = dma_request {
             let base_address = (high_byte as u16) << 8;
             let stored_value = self.read_byte_no_conflict(base_address);
             self.dma = Dma::InProgress {
@@ -144,10 +142,6 @@ impl Mmu {
                 Dma::None
             };
         }
-
-        // There is a one cycle delay between the DMA request and the actual DMA transfer start.
-        // TODO: Check timing.
-        self.dma_request = dma_request;
     }
 
     pub(crate) fn tick_stopped(&mut self) {
