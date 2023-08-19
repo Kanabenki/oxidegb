@@ -57,8 +57,8 @@ impl Gameboy {
         self.cpu.mmu.ppu.screen()
     }
 
-    pub fn samples(&mut self) -> ([i16; 6], [i16; 6], usize) {
-        self.cpu.mmu.apu.samples()
+    pub fn sound_deltas(&mut self) -> (&[i32], &[i32], &[usize]) {
+        self.cpu.mmu.apu.deltas()
     }
 
     pub fn can_save(&self) -> bool {

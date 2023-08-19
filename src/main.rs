@@ -316,22 +316,27 @@ impl Emulator {
                         total_cycles += self.gameboy.run_instruction();
                         // Handle audio.
                         {
-                            let (left, right, count) = self.gameboy.samples();
+                            let (left, right, offsets) = self.gameboy.sound_deltas();
                             let (left_buf, right_buf) = &mut self.resampling_bufs;
-                            let mut offset = 0;
-                            for (&left, &right) in left[..count].iter().zip(&right[..count]) {
-                                left_buf.add_delta(offset, left as i32);
-                                right_buf.add_delta(offset, right as i32);
-                                offset += 4;
-                            }
-                            left_buf.end_frame(offset);
-                            right_buf.end_frame(offset);
-                            let available = left_buf.samples_avail();
-                            if available > 0 {
-                                // TODO: Interleave directly in the ring buffer?
-                                left_buf.read_samples(&mut self.tmp_sound_buf, true);
-                                right_buf.read_samples(&mut self.tmp_sound_buf[1..], true);
-                                self.sound_prod.push_slice(&self.tmp_sound_buf[..]);
+                            if !offsets.is_empty() {
+                                for ((&left, &right), &offset) in
+                                    left.iter().zip(right).zip(offsets)
+                                {
+                                    left_buf.add_delta(offset as u32, left);
+                                    right_buf.add_delta(offset as u32, right);
+                                }
+                                let duration = offsets.last().unwrap() + 1;
+                                left_buf.end_frame(duration as u32);
+                                right_buf.end_frame(duration as u32);
+                                if left_buf.samples_avail() > 256 {
+                                    // TODO: Interleave directly in the ring buffer?
+                                    let read_left =
+                                        left_buf.read_samples(&mut self.tmp_sound_buf, true);
+                                    let read_right =
+                                        right_buf.read_samples(&mut self.tmp_sound_buf[1..], true);
+                                    self.sound_prod
+                                        .push_slice(&self.tmp_sound_buf[..read_left + read_right]);
+                                }
                             }
                         }
                         if total_cycles >= ticks - self.delta {

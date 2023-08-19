@@ -1,5 +1,3 @@
-use std::mem;
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -196,18 +194,22 @@ impl VolumeEnvelope {
 struct WavelenCtrl {
     trigger: bool,
     sound_len_enable: bool,
-    wavelen_high: u8,
+    wavelen: u16,
 }
 impl WavelenCtrl {
-    fn value(&self) -> u8 {
+    fn value_ctrl(&self) -> u8 {
         // TODO check unused/write only bits read value
         (self.sound_len_enable as u8) << 6
     }
 
-    fn set_value(&mut self, value: u8) {
+    fn set_value_wavelen_h_ctrl(&mut self, value: u8) {
         self.trigger = value & 0b1000_0000 != 0;
         self.sound_len_enable = value & 0b100_0000 != 0;
-        self.wavelen_high = value & 0b111;
+        self.wavelen = (self.wavelen & 0x00FF) | ((value as u16 & 0b111) << 8);
+    }
+
+    fn set_value_wavelen_l(&mut self, value: u8) {
+        self.wavelen = (self.wavelen & 0xFF00) | value as u16;
     }
 }
 
@@ -216,26 +218,26 @@ struct Channel1 {
     sweep: Sweep,
     wave_duty_timer_len: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
-    wavelen_low: u8,
-    wavelen_high_ctrl: WavelenCtrl,
+    wavelen_ctrl: WavelenCtrl,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel2 {
     wave_duty_timer_len: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
-    wavelen_low: u8,
-    wavelen_high_ctrl: WavelenCtrl,
+    wavelen_ctrl: WavelenCtrl,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel3 {
     enable: bool,
+    cycles: u32,
     len_timer: u8,
     out_level: u8,
-    wavelen_low: u8,
-    wavelen_high_ctrl: WavelenCtrl,
+    wavelen_ctrl: WavelenCtrl,
     wave_pattern: [u8; 16],
+    prev_val: u8,
+    wave_pattern_index: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Copy)]
@@ -278,9 +280,11 @@ struct Channel4 {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub(crate) struct Apu {
-    left_samples: [i16; 6],
-    right_samples: [i16; 6],
-    samples_count: usize,
+    left_deltas: [i32; 6],
+    right_deltas: [i32; 6],
+    delta_offsets: [usize; 6],
+    delta_offset: usize,
+    delta_count: usize,
     master_vol_vin_pan: MasterVolVinPan,
     sound_panning: SoundPanning,
     sound_enable: SoundEnable,
@@ -326,18 +330,51 @@ impl Apu {
     }
 
     pub(crate) fn tick(&mut self) {
-        if self.samples_count >= 6 {
+        if self.delta_count > 6 {
             // Samples were not fetched, we skip them.
-            self.samples_count = 0;
+            self.delta_count = 0;
+            self.delta_offset = 0;
         }
-        self.left_samples[self.samples_count] = 0;
-        self.right_samples[self.samples_count] = 0;
-        self.samples_count += 1;
+
+        let delta = if self.channel_3.enable {
+            self.channel_3.cycles += 2;
+            if self.channel_3.cycles >= self.channel_3.wavelen_ctrl.wavelen as u32 {
+                self.channel_3.cycles = 0;
+                self.channel_3.wave_pattern_index = (self.channel_3.wave_pattern_index + 1) % 32;
+            }
+
+            let index = self.channel_3.wave_pattern_index / 2;
+            let high_nibble = (self.channel_3.wave_pattern_index % 2) == 0;
+            let sample = if high_nibble {
+                self.channel_3.wave_pattern[index] >> 4
+            } else {
+                self.channel_3.wave_pattern[index] & 0b1111
+            };
+            let delta = (sample as i32 - self.channel_3.prev_val as i32) * 4;
+            self.channel_3.prev_val = sample;
+            delta
+        } else {
+            0
+        };
+
+        if delta != 0 {
+            self.left_deltas[self.delta_count] = delta;
+            self.right_deltas[self.delta_count] = delta;
+            self.delta_offsets[self.delta_count] = 0;
+            self.delta_count += 1;
+        }
+        self.delta_offset += 1;
     }
 
-    pub(crate) fn samples(&mut self) -> ([i16; 6], [i16; 6], usize) {
-        let count = mem::replace(&mut self.samples_count, 0);
-        (self.left_samples, self.right_samples, count)
+    pub(crate) fn deltas(&mut self) -> (&[i32], &[i32], &[usize]) {
+        let count = self.delta_count;
+        self.delta_count = 0;
+        self.delta_offset = 0;
+        (
+            &self.left_deltas[0..count],
+            &self.right_deltas[0..count],
+            &self.delta_offsets[0..count],
+        )
     }
 
     pub(crate) fn read(&self, address: u16) -> u8 {
@@ -346,13 +383,13 @@ impl Apu {
             Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.channel_1.wave_duty_timer_len.value(),
             Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.channel_1.vol_env.value(),
             Self::CH1_WAVELEN_LOW_ADDRESS => 0xFF,
-            Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_1.wavelen_high_ctrl.value(),
+            Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_1.wavelen_ctrl.value_ctrl(),
 
             Self::CH2_UNUSED_ADDRESS => 0xFF,
             Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => self.channel_2.wave_duty_timer_len.value(),
             Self::CH2_VOLUME_ENVELOPPE_ADDRESS => self.channel_2.vol_env.value(),
             Self::CH2_WAVELEN_LOW_ADDRESS => 0xFF,
-            Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_2.wavelen_high_ctrl.value(),
+            Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_2.wavelen_ctrl.value_ctrl(),
 
             Self::CH4_LEN_TIMER_ADDRESS => self.channel_4.len_timer & 0b11_1111,
             Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.channel_4.vol_env.value(),
@@ -363,7 +400,7 @@ impl Apu {
             Self::CH3_LEN_TIMER_ADDRESS => 0xFF,
             Self::CH3_OUT_LEVEL_ADDRESS => self.channel_3.out_level,
             Self::CH3_WAVELEN_LOW_ADDRESS => 0xFF,
-            Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_3.wavelen_high_ctrl.value(),
+            Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_3.wavelen_ctrl.value_ctrl(),
             Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS => {
                 self.channel_3.wave_pattern[(address & 0xF) as usize]
             }
@@ -382,9 +419,9 @@ impl Apu {
             Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => {
                 self.channel_1.wave_duty_timer_len.set_value(value)
             }
-            Self::CH1_WAVELEN_LOW_ADDRESS => self.channel_1.wavelen_low = value,
+            Self::CH1_WAVELEN_LOW_ADDRESS => self.channel_1.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => {
-                self.channel_1.wavelen_high_ctrl.set_value(value)
+                self.channel_1.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
             }
 
             Self::CH2_UNUSED_ADDRESS => {}
@@ -392,9 +429,9 @@ impl Apu {
             Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => {
                 self.channel_2.wave_duty_timer_len.set_value(value)
             }
-            Self::CH2_WAVELEN_LOW_ADDRESS => self.channel_2.wavelen_low = value,
+            Self::CH2_WAVELEN_LOW_ADDRESS => self.channel_2.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => {
-                self.channel_2.wavelen_high_ctrl.set_value(value)
+                self.channel_2.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
             }
 
             Self::CH4_LEN_TIMER_ADDRESS => self.channel_4.len_timer = value & 0b11_1111,
@@ -408,9 +445,9 @@ impl Apu {
             Self::CH3_ENABLE_ADDRESS => self.channel_3.enable = value & 0b1000_0000 != 0,
             Self::CH3_LEN_TIMER_ADDRESS => self.channel_3.len_timer = value,
             Self::CH3_OUT_LEVEL_ADDRESS => self.channel_3.out_level = (value & 0b11) << 5,
-            Self::CH3_WAVELEN_LOW_ADDRESS => self.channel_3.wavelen_low = value,
+            Self::CH3_WAVELEN_LOW_ADDRESS => self.channel_3.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => {
-                self.channel_3.wavelen_high_ctrl.set_value(value)
+                self.channel_3.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
             }
             Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS => {
                 self.channel_3.wave_pattern[(address & 0xF) as usize] = value
