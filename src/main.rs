@@ -30,7 +30,7 @@ struct Emulator {
     window: Window,
     pixels: Pixels,
     modifiers: ModifiersState,
-    tmp_sound_buf: [i16; 2048],
+    tmp_sound_buf: [i16; 4096],
     resampling_bufs: (BlipBuf, BlipBuf),
     sound_prod: HeapProducer<i16>,
     _sound_stream: Stream,
@@ -38,10 +38,13 @@ struct Emulator {
     rom_path: PathBuf,
     save_file: Option<File>,
     delta: u64,
+    audio_cycles: u64,
     fast_forward: bool,
 }
 
 impl Emulator {
+    const AUDIO_FRAME_CYCLES: u64 = (0.025 * Gameboy::CYCLES_PER_SECOND as f32) as u64;
+
     fn new(
         rom: Vec<u8>,
         bootrom: Option<Vec<u8>>,
@@ -113,15 +116,12 @@ impl Emulator {
                     && config.max_sample_rate().0 >= sample_rate_out
             })
             .ok_or(eyre!("Could not find a compatible audio configuration"))?
-            .with_sample_rate(SampleRate(44100))
+            .with_sample_rate(SampleRate(sample_rate_out))
             .into();
 
         let blip_buf = || {
-            let mut buf = BlipBuf::new(512);
-            buf.set_rates(
-                (Gameboy::CYCLES_PER_SECOND / 4) as f64,
-                sample_rate_out as f64,
-            );
+            let mut buf = BlipBuf::new(4096);
+            buf.set_rates(Gameboy::CYCLES_PER_SECOND as f64, sample_rate_out as f64);
             buf
         };
 
@@ -152,13 +152,14 @@ impl Emulator {
             modifiers: ModifiersState::empty(),
             fast_forward,
             sound_prod,
-            tmp_sound_buf: [0; 2048],
+            tmp_sound_buf: [0; 4096],
             _sound_stream: sound_stream,
             resampling_bufs,
             gameboy,
             rom_path,
             save_file,
             delta: 0,
+            audio_cycles: 0,
         })
     }
 
@@ -313,7 +314,8 @@ impl Emulator {
 
                     let mut total_cycles = 0;
                     self.delta = loop {
-                        total_cycles += self.gameboy.run_instruction();
+                        let cycles_elapsed = self.gameboy.run_instruction();
+                        total_cycles += cycles_elapsed;
                         // Handle audio.
                         {
                             let (left, right, offsets) = self.gameboy.sound_deltas();
@@ -322,21 +324,24 @@ impl Emulator {
                                 for ((&left, &right), &offset) in
                                     left.iter().zip(right).zip(offsets)
                                 {
-                                    left_buf.add_delta(offset as u32, left);
-                                    right_buf.add_delta(offset as u32, right);
+                                    left_buf
+                                        .add_delta(self.audio_cycles as u32 + offset as u32, left);
+                                    right_buf
+                                        .add_delta(self.audio_cycles as u32 + offset as u32, right);
                                 }
-                                let duration = offsets.last().unwrap() + 1;
-                                left_buf.end_frame(duration as u32);
-                                right_buf.end_frame(duration as u32);
-                                if left_buf.samples_avail() > 256 {
-                                    // TODO: Interleave directly in the ring buffer?
-                                    let read_left =
-                                        left_buf.read_samples(&mut self.tmp_sound_buf, true);
-                                    let read_right =
-                                        right_buf.read_samples(&mut self.tmp_sound_buf[1..], true);
-                                    self.sound_prod
-                                        .push_slice(&self.tmp_sound_buf[..read_left + read_right]);
-                                }
+                            }
+
+                            self.audio_cycles += cycles_elapsed;
+                            if self.audio_cycles >= Self::AUDIO_FRAME_CYCLES {
+                                left_buf.end_frame(self.audio_cycles as u32);
+                                right_buf.end_frame(self.audio_cycles as u32);
+                                let read_left =
+                                    left_buf.read_samples(&mut self.tmp_sound_buf, true);
+                                let read_right =
+                                    right_buf.read_samples(&mut self.tmp_sound_buf[1..], true);
+                                self.sound_prod
+                                    .push_slice(&self.tmp_sound_buf[..read_left + read_right]);
+                                self.audio_cycles = 0;
                             }
                         }
                         if total_cycles >= ticks - self.delta {

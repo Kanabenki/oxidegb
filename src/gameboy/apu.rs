@@ -330,7 +330,7 @@ impl Apu {
     }
 
     pub(crate) fn tick(&mut self) {
-        if self.delta_count > 6 {
+        if self.delta_count > 6 * 4 {
             // Samples were not fetched, we skip them.
             self.delta_count = 0;
             self.delta_offset = 0;
@@ -363,7 +363,7 @@ impl Apu {
             self.delta_offsets[self.delta_count] = 0;
             self.delta_count += 1;
         }
-        self.delta_offset += 1;
+        self.delta_offset += 4;
     }
 
     pub(crate) fn deltas(&mut self) -> (&[i32], &[i32], &[usize]) {

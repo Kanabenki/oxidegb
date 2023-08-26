@@ -263,8 +263,8 @@ impl MapperOps for Mbc3 {
             self.cycles = 0;
         } else {
             let time = &mut self.current_time;
-            self.cycles += 1;
-            if self.cycles == Gameboy::CYCLES_PER_SECOND as usize / 4 {
+            self.cycles += 4;
+            if self.cycles == Gameboy::CYCLES_PER_SECOND as usize {
                 self.cycles = 0;
                 time.seconds += 1;
                 if time.seconds == 60 {
