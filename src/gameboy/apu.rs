@@ -330,7 +330,7 @@ impl Apu {
     }
 
     pub(crate) fn tick(&mut self) {
-        if self.delta_count > 6 * 4 {
+        if self.delta_offset >= 6 * 4 {
             // Samples were not fetched, we skip them.
             self.delta_count = 0;
             self.delta_offset = 0;
@@ -350,7 +350,8 @@ impl Apu {
             } else {
                 self.channel_3.wave_pattern[index] & 0b1111
             };
-            let delta = (sample as i32 - self.channel_3.prev_val as i32) * 4;
+            // TODO: Find proper remapping.
+            let delta = (sample as i32 - self.channel_3.prev_val as i32) * (i32::MAX / 16);
             self.channel_3.prev_val = sample;
             delta
         } else {
@@ -360,7 +361,7 @@ impl Apu {
         if delta != 0 {
             self.left_deltas[self.delta_count] = delta;
             self.right_deltas[self.delta_count] = delta;
-            self.delta_offsets[self.delta_count] = 0;
+            self.delta_offsets[self.delta_count] = self.delta_offset;
             self.delta_count += 1;
         }
         self.delta_offset += 4;
