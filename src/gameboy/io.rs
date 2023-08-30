@@ -133,8 +133,14 @@ struct Timer {
     counter: u8,
     modulo: u8,
     enabled: bool,
+    apu_inc_div: bool,
     input_clock: InputClock,
     state: TimerState,
+}
+
+pub(crate) struct TimerTick {
+    pub(crate) timer_overflow: bool,
+    pub(crate) apu_inc_div: bool,
 }
 
 impl Timer {
@@ -150,19 +156,27 @@ impl Timer {
             modulo: 0,
             enabled: false,
             input_clock: InputClock::CpuDiv1024,
+            apu_inc_div: false,
             state: TimerState::Normal,
         }
     }
 
-    fn tick(&mut self) -> bool {
+    fn tick(&mut self) -> TimerTick {
         let old_divider = self.divider;
         self.divider = self.divider.wrapping_add(4);
 
+        // Bit 4 high to low
+        let apu_inc_div = self.divider == 0b10_0000 || self.apu_inc_div;
+        self.apu_inc_div = false;
+
         if !self.enabled {
-            return false;
+            return TimerTick {
+                apu_inc_div,
+                timer_overflow: false,
+            };
         }
 
-        match self.state {
+        let timer_overflow = match self.state {
             TimerState::Normal => {
                 if (old_divider ^ self.divider) & self.input_clock.bit() != 0 {
                     self.increase_counter();
@@ -174,6 +188,11 @@ impl Timer {
                 self.state = TimerState::Normal;
                 true
             }
+        };
+
+        TimerTick {
+            timer_overflow,
+            apu_inc_div,
         }
     }
 
@@ -204,6 +223,9 @@ impl Timer {
             Self::DIVIDER_ADDRESS => {
                 if self.divider & self.input_clock.bit() != 0 {
                     self.increase_counter();
+                }
+                if self.divider & 0b1_0000 != 0 {
+                    self.apu_inc_div = true;
                 }
                 self.divider = 0;
             }
@@ -249,6 +271,11 @@ pub(crate) struct Io {
     timer: Timer,
 }
 
+pub(crate) struct IoTick {
+    pub(crate) interrupts: FlagSet<Interrupt>,
+    pub(crate) apu_inc_div: bool,
+}
+
 impl Io {
     pub(crate) const fn new() -> Self {
         Self {
@@ -257,17 +284,24 @@ impl Io {
         }
     }
 
-    pub(crate) fn tick(&mut self) -> FlagSet<Interrupt> {
+    pub(crate) fn tick(&mut self) -> IoTick {
         let mut interrupts = FlagSet::new_truncated(0);
         if self.buttons.interrupt_raised {
             interrupts |= Interrupt::Joypad;
         }
 
-        if self.timer.tick() {
+        let TimerTick {
+            timer_overflow,
+            apu_inc_div,
+        } = self.timer.tick();
+        if timer_overflow {
             interrupts |= Interrupt::Timer;
         }
 
-        interrupts
+        IoTick {
+            interrupts,
+            apu_inc_div,
+        }
     }
 
     pub(crate) fn tick_stopped(&mut self) -> FlagSet<Interrupt> {

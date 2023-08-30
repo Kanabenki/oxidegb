@@ -109,11 +109,15 @@ impl Mmu {
     }
 
     pub(crate) fn tick(&mut self) {
-        self.apu.tick();
         self.cartridge.tick();
-        let io_interrupts = self.io.tick();
+        let io_tick = self.io.tick();
         let (ppu_interrupts, dma_request) = self.ppu.tick();
-        self.interrupt_flags |= io_interrupts | ppu_interrupts;
+        self.interrupt_flags |= io_tick.interrupts | ppu_interrupts;
+
+        if io_tick.apu_inc_div {
+            self.apu.inc_div();
+        }
+        self.apu.tick();
 
         if let DmaRequest::Start(high_byte) = dma_request {
             let base_address = (high_byte as u16) << 8;

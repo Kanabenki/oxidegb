@@ -236,7 +236,6 @@ struct Channel3 {
     out_level: u8,
     wavelen_ctrl: WavelenCtrl,
     wave_pattern: [u8; 16],
-    prev_val: u8,
     wave_pattern_index: usize,
 }
 
@@ -292,6 +291,8 @@ pub(crate) struct Apu {
     channel_2: Channel2,
     channel_3: Channel3,
     channel_4: Channel4,
+    div: u8,
+    amplitude: i32,
 }
 
 impl Apu {
@@ -329,6 +330,19 @@ impl Apu {
         Default::default()
     }
 
+    pub(crate) fn inc_div(&mut self) {
+        self.div = self.div.wrapping_add(1);
+        if self.div & 0b1 == 0 {
+            // Tick sound length
+        }
+        if self.div & 0b11 == 0 {
+            // Tick channel 1 frequency sweep
+        }
+        if self.div & 0b111 == 0 {
+            // Tick enveloppe sweep
+        }
+    }
+
     pub(crate) fn tick(&mut self) {
         if self.delta_offset >= 6 * 4 {
             // Samples were not fetched, we skip them.
@@ -336,35 +350,44 @@ impl Apu {
             self.delta_offset = 0;
         }
 
-        let delta = if self.channel_3.enable {
-            self.channel_3.cycles += 2;
-            if self.channel_3.cycles >= self.channel_3.wavelen_ctrl.wavelen as u32 {
-                self.channel_3.cycles = 0;
-                self.channel_3.wave_pattern_index = (self.channel_3.wave_pattern_index + 1) % 32;
-            }
+        for _ in 0..2 {
+            let amplitude = if self.channel_3.enable {
+                self.channel_3.cycles += 1;
+                if self.channel_3.cycles >= self.channel_3.wavelen_ctrl.wavelen as u32 {
+                    self.channel_3.cycles = 0;
+                    self.channel_3.wave_pattern_index =
+                        (self.channel_3.wave_pattern_index + 1) % 32;
+                }
 
-            let index = self.channel_3.wave_pattern_index / 2;
-            let high_nibble = (self.channel_3.wave_pattern_index % 2) == 0;
-            let sample = if high_nibble {
-                self.channel_3.wave_pattern[index] >> 4
+                let index = self.channel_3.wave_pattern_index / 2;
+                let high_nibble = (self.channel_3.wave_pattern_index % 2) == 0;
+                let sample = if high_nibble {
+                    self.channel_3.wave_pattern[index] >> 4
+                } else {
+                    self.channel_3.wave_pattern[index] & 0b1111
+                };
+                let sample = if self.channel_3.out_level == 0 {
+                    0
+                } else {
+                    sample >> (self.channel_3.out_level - 1)
+                };
+                // TODO: Find proper remapping.
+                (sample as i32 - 8) * (i32::MAX / 16)
             } else {
-                self.channel_3.wave_pattern[index] & 0b1111
+                0
             };
-            // TODO: Find proper remapping.
-            let delta = (sample as i32 - self.channel_3.prev_val as i32) * (i32::MAX / 16);
-            self.channel_3.prev_val = sample;
-            delta
-        } else {
-            0
-        };
 
-        if delta != 0 {
-            self.left_deltas[self.delta_count] = delta;
-            self.right_deltas[self.delta_count] = delta;
-            self.delta_offsets[self.delta_count] = self.delta_offset;
-            self.delta_count += 1;
+            let delta = amplitude - self.amplitude;
+            self.amplitude = amplitude;
+
+            if delta != 0 {
+                self.left_deltas[self.delta_count] = delta;
+                self.right_deltas[self.delta_count] = delta;
+                self.delta_offsets[self.delta_count] = self.delta_offset;
+                self.delta_count += 1;
+            }
+            self.delta_offset += 2;
         }
-        self.delta_offset += 4;
     }
 
     pub(crate) fn deltas(&mut self) -> (&[i32], &[i32], &[usize]) {
