@@ -279,9 +279,9 @@ struct Channel4 {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub(crate) struct Apu {
-    left_deltas: [i32; 6],
-    right_deltas: [i32; 6],
-    delta_offsets: [usize; 6],
+    left_deltas: [i32; 12],
+    right_deltas: [i32; 12],
+    delta_offsets: [usize; 12],
     delta_offset: usize,
     delta_count: usize,
     master_vol_vin_pan: MasterVolVinPan,
@@ -333,6 +333,10 @@ impl Apu {
     pub(crate) fn inc_div(&mut self) {
         self.div = self.div.wrapping_add(1);
         if self.div & 0b1 == 0 {
+            self.channel_3.len_timer = u8::min(self.channel_3.len_timer + 1, 64);
+            if self.channel_3.len_timer == 64 && self.channel_3.wavelen_ctrl.sound_len_enable {
+                self.channel_3.enable = false;
+            }
             // Tick sound length
         }
         if self.div & 0b11 == 0 {
@@ -344,7 +348,7 @@ impl Apu {
     }
 
     pub(crate) fn tick(&mut self) {
-        if self.delta_offset >= 6 * 4 {
+        if self.delta_offset >= 6 * 2 * 4 {
             // Samples were not fetched, we skip them.
             self.delta_count = 0;
             self.delta_offset = 0;
@@ -353,8 +357,8 @@ impl Apu {
         for _ in 0..2 {
             let amplitude = if self.channel_3.enable {
                 self.channel_3.cycles += 1;
-                if self.channel_3.cycles >= self.channel_3.wavelen_ctrl.wavelen as u32 {
-                    self.channel_3.cycles = 0;
+                if self.channel_3.cycles == 0b1000_0000_0000 {
+                    self.channel_3.cycles = self.channel_3.wavelen_ctrl.wavelen as u32;
                     self.channel_3.wave_pattern_index =
                         (self.channel_3.wave_pattern_index + 1) % 32;
                 }
@@ -372,7 +376,7 @@ impl Apu {
                     sample >> (self.channel_3.out_level - 1)
                 };
                 // TODO: Find proper remapping.
-                (sample as i32 - 8) * (i32::MAX / 16)
+                (sample as i32 - 8) * (i32::MAX / 2i32.pow(18))
             } else {
                 0
             };
@@ -422,7 +426,7 @@ impl Apu {
 
             Self::CH3_ENABLE_ADDRESS => (self.channel_3.enable as u8) << 7,
             Self::CH3_LEN_TIMER_ADDRESS => 0xFF,
-            Self::CH3_OUT_LEVEL_ADDRESS => self.channel_3.out_level,
+            Self::CH3_OUT_LEVEL_ADDRESS => (self.channel_3.out_level & 0b11) << 5,
             Self::CH3_WAVELEN_LOW_ADDRESS => 0xFF,
             Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_3.wavelen_ctrl.value_ctrl(),
             Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS => {
@@ -468,7 +472,7 @@ impl Apu {
 
             Self::CH3_ENABLE_ADDRESS => self.channel_3.enable = value & 0b1000_0000 != 0,
             Self::CH3_LEN_TIMER_ADDRESS => self.channel_3.len_timer = value,
-            Self::CH3_OUT_LEVEL_ADDRESS => self.channel_3.out_level = (value & 0b11) << 5,
+            Self::CH3_OUT_LEVEL_ADDRESS => self.channel_3.out_level = (value >> 5) & 0b11,
             Self::CH3_WAVELEN_LOW_ADDRESS => self.channel_3.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => {
                 self.channel_3.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
