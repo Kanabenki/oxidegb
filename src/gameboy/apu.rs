@@ -2,30 +2,45 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct ChannelToggles {
-    channel_1: bool,
-    channel_2: bool,
-    channel_3: bool,
-    channel_4: bool,
+    ch_1: bool,
+    ch_2: bool,
+    ch_3: bool,
+    ch_4: bool,
 }
 
 impl ChannelToggles {
+    fn off() -> Self {
+        Self {
+            ch_1: false,
+            ch_2: false,
+            ch_3: false,
+            ch_4: false,
+        }
+    }
+
+    fn on() -> Self {
+        Self {
+            ch_1: true,
+            ch_2: true,
+            ch_3: true,
+            ch_4: true,
+        }
+    }
+
     fn value(&self) -> u8 {
-        self.channel_1 as u8
-            | (self.channel_2 as u8) << 1
-            | (self.channel_3 as u8) << 2
-            | (self.channel_4 as u8) << 3
+        self.ch_1 as u8 | (self.ch_2 as u8) << 1 | (self.ch_3 as u8) << 2 | (self.ch_4 as u8) << 3
     }
 
     fn from_nibble(nibble: u8) -> Self {
-        let channel_1 = nibble & 0b0001 != 0;
-        let channel_2 = nibble & 0b0010 != 0;
-        let channel_3 = nibble & 0b0100 != 0;
-        let channel_4 = nibble & 0b1000 != 0;
+        let ch_1 = nibble & 0b0001 != 0;
+        let ch_2 = nibble & 0b0010 != 0;
+        let ch_3 = nibble & 0b0100 != 0;
+        let ch_4 = nibble & 0b1000 != 0;
         Self {
-            channel_1,
-            channel_2,
-            channel_3,
-            channel_4,
+            ch_1,
+            ch_2,
+            ch_3,
+            ch_4,
         }
     }
 }
@@ -174,6 +189,7 @@ struct VolumeEnvelope {
     direction: EnvelopeDir,
     sweep_pace: u8,
 }
+
 impl VolumeEnvelope {
     fn value(&self) -> u8 {
         self.initial << 4 | (self.direction as u8) << 3 | self.sweep_pace & 0b111
@@ -215,6 +231,7 @@ impl WavelenCtrl {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel1 {
+    enable: bool,
     sweep: Sweep,
     wave_duty_timer_len: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
@@ -223,6 +240,7 @@ struct Channel1 {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel2 {
+    enable: bool,
     wave_duty_timer_len: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
     wavelen_ctrl: WavelenCtrl,
@@ -237,6 +255,16 @@ struct Channel3 {
     wavelen_ctrl: WavelenCtrl,
     wave_pattern: [u8; 16],
     wave_pattern_index: usize,
+}
+
+impl Channel3 {
+    fn reset(&mut self) {
+        *self = Self {
+            enable: true,
+            wave_pattern: self.wave_pattern,
+            ..Default::default()
+        };
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Copy)]
@@ -270,6 +298,7 @@ impl FreqRand {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel4 {
+    enable: bool,
     len_timer: u8,
     vol_env: VolumeEnvelope,
     freq_rand: FreqRand,
@@ -287,10 +316,10 @@ pub(crate) struct Apu {
     master_vol_vin_pan: MasterVolVinPan,
     sound_panning: SoundPanning,
     sound_enable: SoundEnable,
-    channel_1: Channel1,
-    channel_2: Channel2,
-    channel_3: Channel3,
-    channel_4: Channel4,
+    ch_1: Channel1,
+    ch_2: Channel2,
+    ch_3: Channel3,
+    ch_4: Channel4,
     div: u8,
     amplitude: i32,
 }
@@ -327,24 +356,47 @@ impl Apu {
     const CH3_WAVE_PATTERN_END_ADDRESS: u16 = 0xFF3F;
 
     pub(crate) fn new() -> Self {
-        Default::default()
+        Self {
+            ..Default::default()
+        }
     }
 
     pub(crate) fn inc_div(&mut self) {
         self.div = self.div.wrapping_add(1);
+        // Tick sound length.
         if self.div & 0b1 == 0 {
-            self.channel_3.len_timer = u8::min(self.channel_3.len_timer + 1, 64);
-            if self.channel_3.len_timer == 64 && self.channel_3.wavelen_ctrl.sound_len_enable {
-                self.channel_3.enable = false;
+            self.ch_3.len_timer = u8::min(self.ch_3.len_timer + 1, 64);
+            if self.ch_3.len_timer == 64 && self.ch_3.wavelen_ctrl.sound_len_enable {
+                self.sound_enable.channels.ch_3 = false;
             }
-            // Tick sound length
         }
-        if self.div & 0b11 == 0 {
-            // Tick channel 1 frequency sweep
+        // Tick channel 1 frequency sweep.
+        if self.div & 0b11 == 0
+            && self.ch_1.sweep.pace != 0
+            && self.ch_1.wavelen_ctrl.wavelen > 0
+            && (self.div >> 2) % self.ch_1.sweep.pace == 0
+        {
+            let offset =
+                self.ch_1.wavelen_ctrl.wavelen / 2u16.pow(self.ch_1.sweep.slope_ctrl as u32);
+            match self.ch_1.sweep.op {
+                SweepOp::Increase => {
+                    if self.ch_1.wavelen_ctrl.wavelen + offset >= 0b1000_0000_0000 {
+                        self.ch_1.enable = false;
+                    } else {
+                        self.ch_1.wavelen_ctrl.wavelen += offset;
+                    }
+                }
+                SweepOp::Decrease => {
+                    if offset > self.ch_1.wavelen_ctrl.wavelen {
+                        self.ch_1.enable = false;
+                    } else {
+                        self.ch_1.wavelen_ctrl.wavelen -= offset;
+                    }
+                }
+            }
         }
-        if self.div & 0b111 == 0 {
-            // Tick enveloppe sweep
-        }
+        // Tick enveloppe sweep.
+        if self.div & 0b111 == 0 {}
     }
 
     pub(crate) fn tick(&mut self) {
@@ -354,29 +406,43 @@ impl Apu {
             self.delta_offset = 0;
         }
 
+        if self.ch_1.wavelen_ctrl.trigger {
+            self.ch_1.wavelen_ctrl.trigger = false;
+            if self.ch_1.enable {
+                self.sound_enable.channels.ch_1 = true;
+            }
+        }
+
+        if self.ch_3.wavelen_ctrl.trigger {
+            self.ch_3.wavelen_ctrl.trigger = false;
+            self.ch_3.wave_pattern_index = 0;
+            if self.ch_3.enable {
+                self.sound_enable.channels.ch_3 = true;
+            }
+        }
+
         for _ in 0..2 {
-            let amplitude = if self.channel_3.enable {
-                self.channel_3.cycles += 1;
-                if self.channel_3.cycles == 0b1000_0000_0000 {
-                    self.channel_3.cycles = self.channel_3.wavelen_ctrl.wavelen as u32;
-                    self.channel_3.wave_pattern_index =
-                        (self.channel_3.wave_pattern_index + 1) % 32;
+            let amplitude = if self.sound_enable.channels.ch_3 {
+                self.ch_3.cycles += 1;
+                if self.ch_3.cycles == 0b1000_0000_0000 {
+                    self.ch_3.cycles = self.ch_3.wavelen_ctrl.wavelen as u32;
+                    self.ch_3.wave_pattern_index = (self.ch_3.wave_pattern_index + 1) % 32;
                 }
 
-                let index = self.channel_3.wave_pattern_index / 2;
-                let high_nibble = (self.channel_3.wave_pattern_index % 2) == 0;
+                let index = self.ch_3.wave_pattern_index / 2;
+                let high_nibble = (self.ch_3.wave_pattern_index % 2) == 0;
                 let sample = if high_nibble {
-                    self.channel_3.wave_pattern[index] >> 4
+                    self.ch_3.wave_pattern[index] >> 4
                 } else {
-                    self.channel_3.wave_pattern[index] & 0b1111
+                    self.ch_3.wave_pattern[index] & 0b1111
                 };
-                let sample = if self.channel_3.out_level == 0 {
+                let sample = if self.ch_3.out_level == 0 {
                     0
                 } else {
-                    sample >> (self.channel_3.out_level - 1)
+                    sample >> (self.ch_3.out_level - 1)
                 };
                 // TODO: Find proper remapping.
-                (sample as i32 - 8) * (i32::MAX / 2i32.pow(18))
+                (-(sample as i32) + 8) * (i32::MAX / 2i32.pow(18))
             } else {
                 0
             };
@@ -407,30 +473,30 @@ impl Apu {
 
     pub(crate) fn read(&self, address: u16) -> u8 {
         match address {
-            Self::CH1_SWEEP_ADDRESS => self.channel_1.sweep.value(),
-            Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.channel_1.wave_duty_timer_len.value(),
-            Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.channel_1.vol_env.value(),
+            Self::CH1_SWEEP_ADDRESS => self.ch_1.sweep.value(),
+            Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_1.wave_duty_timer_len.value(),
+            Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.ch_1.vol_env.value(),
             Self::CH1_WAVELEN_LOW_ADDRESS => 0xFF,
-            Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_1.wavelen_ctrl.value_ctrl(),
+            Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => self.ch_1.wavelen_ctrl.value_ctrl(),
 
             Self::CH2_UNUSED_ADDRESS => 0xFF,
-            Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => self.channel_2.wave_duty_timer_len.value(),
-            Self::CH2_VOLUME_ENVELOPPE_ADDRESS => self.channel_2.vol_env.value(),
+            Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_2.wave_duty_timer_len.value(),
+            Self::CH2_VOLUME_ENVELOPPE_ADDRESS => self.ch_2.vol_env.value(),
             Self::CH2_WAVELEN_LOW_ADDRESS => 0xFF,
-            Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_2.wavelen_ctrl.value_ctrl(),
+            Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => self.ch_2.wavelen_ctrl.value_ctrl(),
 
-            Self::CH4_LEN_TIMER_ADDRESS => self.channel_4.len_timer & 0b11_1111,
-            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.channel_4.vol_env.value(),
-            Self::CH4_FREQ_RAND_ADDRESS => self.channel_4.freq_rand.value(),
-            Self::CH4_CTRL_ADDRESS => (self.channel_4.sound_len_enable as u8) << 6,
+            Self::CH4_LEN_TIMER_ADDRESS => self.ch_4.len_timer & 0b11_1111,
+            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.ch_4.vol_env.value(),
+            Self::CH4_FREQ_RAND_ADDRESS => self.ch_4.freq_rand.value(),
+            Self::CH4_CTRL_ADDRESS => (self.ch_4.sound_len_enable as u8) << 6,
 
-            Self::CH3_ENABLE_ADDRESS => (self.channel_3.enable as u8) << 7,
+            Self::CH3_ENABLE_ADDRESS => (self.ch_3.enable as u8) << 7,
             Self::CH3_LEN_TIMER_ADDRESS => 0xFF,
-            Self::CH3_OUT_LEVEL_ADDRESS => (self.channel_3.out_level & 0b11) << 5,
+            Self::CH3_OUT_LEVEL_ADDRESS => (self.ch_3.out_level & 0b11) << 5,
             Self::CH3_WAVELEN_LOW_ADDRESS => 0xFF,
-            Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => self.channel_3.wavelen_ctrl.value_ctrl(),
+            Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => self.ch_3.wavelen_ctrl.value_ctrl(),
             Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS => {
-                self.channel_3.wave_pattern[(address & 0xF) as usize]
+                self.ch_3.wave_pattern[(address & 0xF) as usize]
             }
 
             Self::MASTER_VOL_VIN_PAN_ADDRESS => self.master_vol_vin_pan.value(),
@@ -442,48 +508,61 @@ impl Apu {
 
     pub(crate) fn write(&mut self, address: u16, value: u8) {
         match address {
-            Self::CH1_SWEEP_ADDRESS => self.channel_1.sweep.set_value(value),
-            Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.channel_1.vol_env.set_value(value),
-            Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => {
-                self.channel_1.wave_duty_timer_len.set_value(value)
-            }
-            Self::CH1_WAVELEN_LOW_ADDRESS => self.channel_1.wavelen_ctrl.set_value_wavelen_l(value),
+            Self::CH1_SWEEP_ADDRESS => self.ch_1.sweep.set_value(value),
+            Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.ch_1.vol_env.set_value(value),
+            Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_1.wave_duty_timer_len.set_value(value),
+            Self::CH1_WAVELEN_LOW_ADDRESS => self.ch_1.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => {
-                self.channel_1.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
+                self.ch_1.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
             }
 
             Self::CH2_UNUSED_ADDRESS => {}
-            Self::CH2_VOLUME_ENVELOPPE_ADDRESS => self.channel_2.vol_env.set_value(value),
-            Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => {
-                self.channel_2.wave_duty_timer_len.set_value(value)
-            }
-            Self::CH2_WAVELEN_LOW_ADDRESS => self.channel_2.wavelen_ctrl.set_value_wavelen_l(value),
+            Self::CH2_VOLUME_ENVELOPPE_ADDRESS => self.ch_2.vol_env.set_value(value),
+            Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_2.wave_duty_timer_len.set_value(value),
+            Self::CH2_WAVELEN_LOW_ADDRESS => self.ch_2.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => {
-                self.channel_2.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
+                self.ch_2.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
             }
 
-            Self::CH4_LEN_TIMER_ADDRESS => self.channel_4.len_timer = value & 0b11_1111,
-            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.channel_4.vol_env.set_value(value),
-            Self::CH4_FREQ_RAND_ADDRESS => self.channel_4.freq_rand.set_value(value),
+            Self::CH4_LEN_TIMER_ADDRESS => self.ch_4.len_timer = value & 0b11_1111,
+            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.ch_4.vol_env.set_value(value),
+            Self::CH4_FREQ_RAND_ADDRESS => self.ch_4.freq_rand.set_value(value),
             Self::CH4_CTRL_ADDRESS => {
-                self.channel_4.trigger = value & 0b1000_0000 != 0;
-                self.channel_4.sound_len_enable = value & 0b100_0000 != 0;
+                self.ch_4.trigger = value & 0b1000_0000 != 0;
+                self.ch_4.sound_len_enable = value & 0b100_0000 != 0;
             }
 
-            Self::CH3_ENABLE_ADDRESS => self.channel_3.enable = value & 0b1000_0000 != 0,
-            Self::CH3_LEN_TIMER_ADDRESS => self.channel_3.len_timer = value,
-            Self::CH3_OUT_LEVEL_ADDRESS => self.channel_3.out_level = (value >> 5) & 0b11,
-            Self::CH3_WAVELEN_LOW_ADDRESS => self.channel_3.wavelen_ctrl.set_value_wavelen_l(value),
+            Self::CH3_ENABLE_ADDRESS => {
+                self.ch_3.enable = value & 0b1000_0000 != 0;
+                self.sound_enable.channels.ch_3 = self.ch_3.enable;
+            }
+            Self::CH3_LEN_TIMER_ADDRESS => self.ch_3.len_timer = value,
+            Self::CH3_OUT_LEVEL_ADDRESS => self.ch_3.out_level = (value >> 5) & 0b11,
+            Self::CH3_WAVELEN_LOW_ADDRESS => self.ch_3.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => {
-                self.channel_3.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
+                self.ch_3.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
             }
             Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS => {
-                self.channel_3.wave_pattern[(address & 0xF) as usize] = value
+                self.ch_3.wave_pattern[(address & 0xF) as usize] = value
             }
 
             Self::MASTER_VOL_VIN_PAN_ADDRESS => self.master_vol_vin_pan.set_value(value),
             Self::SOUND_PANNING_ADDRESS => self.sound_panning.set_value(value),
-            Self::SOUND_ENABLE_ADDRESS => self.sound_enable.all = value & 0b1000_0000 != 0,
+            Self::SOUND_ENABLE_ADDRESS => {
+                self.sound_enable.all = value >> 7 != 0;
+                if self.sound_enable.all {
+                    self.ch_1 = Default::default();
+                    self.ch_1.enable = true;
+                    self.ch_2 = Default::default();
+                    self.ch_2.enable = true;
+                    self.ch_3.reset();
+                    self.ch_4 = Default::default();
+                    self.ch_4.enable = true;
+                    self.sound_enable.channels = ChannelToggles::off();
+                } else {
+                    self.sound_enable.channels = ChannelToggles::on();
+                }
+            }
             _ => unreachable!("Tried to write invalid address {address:04X} in apu"),
         }
     }
