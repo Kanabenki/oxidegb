@@ -39,6 +39,8 @@ impl MemoryOps for Cpu {
 }
 
 impl Cpu {
+    pub(crate) const MAX_TICKS_PER_INSTR: usize = 6 * 4;
+
     pub(crate) fn new(
         rom: Vec<u8>,
         bootrom: Option<Vec<u8>>,

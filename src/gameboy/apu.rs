@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::cpu::Cpu;
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct ChannelToggles {
     ch_1: bool,
@@ -136,18 +138,18 @@ enum WaveDuty {
     W3 = 3,
 }
 
-type _Waveform = [bool; 8];
+type Waveform = [bool; 8];
 
 impl WaveDuty {
-    const _WAVEFORMS: [_Waveform; 4] = [
+    const WAVEFORMS: [Waveform; 4] = [
         [true, true, true, true, true, true, true, false],
         [false, true, true, true, true, true, true, false],
         [false, true, true, true, true, false, false, false],
         [true, false, false, false, false, false, false, true],
     ];
 
-    const fn _waveform(&self) -> &_Waveform {
-        &Self::_WAVEFORMS[*self as usize]
+    const fn waveform(&self) -> &Waveform {
+        &Self::WAVEFORMS[*self as usize]
     }
 }
 
@@ -232,6 +234,8 @@ impl WavelenCtrl {
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel1 {
     enable: bool,
+    cycles: u16,
+    wave_idx: usize,
     sweep: Sweep,
     wave_duty_timer_len: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
@@ -241,6 +245,8 @@ struct Channel1 {
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel2 {
     enable: bool,
+    cycles: u16,
+    wave_idx: usize,
     wave_duty_timer_len: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
     wavelen_ctrl: WavelenCtrl,
@@ -249,7 +255,7 @@ struct Channel2 {
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel3 {
     enable: bool,
-    cycles: u32,
+    cycles: u16,
     len_timer: u8,
     out_level: u8,
     wavelen_ctrl: WavelenCtrl,
@@ -355,6 +361,8 @@ impl Apu {
     const CH3_WAVE_PATTERN_START_ADDRESS: u16 = 0xFF30;
     const CH3_WAVE_PATTERN_END_ADDRESS: u16 = 0xFF3F;
 
+    const WAVELEN_MAX: u16 = 1 << 11;
+
     pub(crate) fn new() -> Self {
         Self {
             ..Default::default()
@@ -400,7 +408,8 @@ impl Apu {
     }
 
     pub(crate) fn tick(&mut self) {
-        if self.delta_offset >= 6 * 2 * 4 {
+        // TODO: Refactor once all channels work properly.
+        if self.delta_offset >= Cpu::MAX_TICKS_PER_INSTR * 2 {
             // Samples were not fetched, we skip them.
             self.delta_count = 0;
             self.delta_offset = 0;
@@ -413,6 +422,13 @@ impl Apu {
             }
         }
 
+        if self.ch_2.wavelen_ctrl.trigger {
+            self.ch_2.wavelen_ctrl.trigger = false;
+            if self.ch_2.enable {
+                self.sound_enable.channels.ch_2 = true;
+            }
+        }
+
         if self.ch_3.wavelen_ctrl.trigger {
             self.ch_3.wavelen_ctrl.trigger = false;
             self.ch_3.wave_pattern_index = 0;
@@ -421,11 +437,46 @@ impl Apu {
             }
         }
 
+        let amp_ch1 = if self.sound_enable.channels.ch_1 {
+            self.ch_1.cycles += 1;
+            if self.ch_1.cycles == Self::WAVELEN_MAX {
+                self.ch_1.cycles = self.ch_1.wavelen_ctrl.wavelen;
+                self.ch_1.wave_idx = (self.ch_1.wave_idx + 1) % 8;
+            }
+            let val = if self.ch_1.wave_duty_timer_len.wave_duty.waveform()[self.ch_1.wave_idx] {
+                // TODO: Enveloppe
+                0b1111
+            } else {
+                0
+            };
+            -val + 8
+        } else {
+            0
+        };
+
+        let amp_ch2 = if self.sound_enable.channels.ch_2 {
+            self.ch_2.cycles += 1;
+            if self.ch_2.cycles == Self::WAVELEN_MAX {
+                self.ch_2.cycles = self.ch_1.wavelen_ctrl.wavelen;
+                self.ch_2.wave_idx = (self.ch_2.wave_idx + 1) % 8;
+            }
+            let val = if self.ch_2.wave_duty_timer_len.wave_duty.waveform()[self.ch_2.wave_idx] {
+                0b1111
+            } else {
+                0
+            };
+            -val + 8
+        } else {
+            0
+        };
+
+        let amp_ch4 = 0;
+
         for _ in 0..2 {
-            let amplitude = if self.sound_enable.channels.ch_3 {
+            let amp_ch3 = if self.sound_enable.channels.ch_3 {
                 self.ch_3.cycles += 1;
-                if self.ch_3.cycles == 0b1000_0000_0000 {
-                    self.ch_3.cycles = self.ch_3.wavelen_ctrl.wavelen as u32;
+                if self.ch_3.cycles == Self::WAVELEN_MAX {
+                    self.ch_3.cycles = self.ch_3.wavelen_ctrl.wavelen;
                     self.ch_3.wave_pattern_index = (self.ch_3.wave_pattern_index + 1) % 32;
                 }
 
@@ -442,11 +493,13 @@ impl Apu {
                     sample >> (self.ch_3.out_level - 1)
                 };
                 // TODO: Find proper remapping.
-                (-(sample as i32) + 8) * (i32::MAX / 2i32.pow(18))
+                -(sample as i32) + 8
             } else {
                 0
             };
 
+            let amp_ch3 = 0;
+            let amplitude = (amp_ch1 + amp_ch2 + amp_ch3 + amp_ch4) * (i32::MAX / 2i32.pow(18));
             let delta = amplitude - self.amplitude;
             self.amplitude = amplitude;
 
