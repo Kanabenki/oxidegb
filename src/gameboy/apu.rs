@@ -189,12 +189,12 @@ enum EnvelopeDir {
 struct VolumeEnvelope {
     initial: u8,
     direction: EnvelopeDir,
-    sweep_pace: u8,
+    pace: u8,
 }
 
 impl VolumeEnvelope {
     fn value(&self) -> u8 {
-        self.initial << 4 | (self.direction as u8) << 3 | self.sweep_pace & 0b111
+        self.initial << 4 | (self.direction as u8) << 3 | self.pace & 0b111
     }
 
     fn set_value(&mut self, value: u8) {
@@ -204,7 +204,7 @@ impl VolumeEnvelope {
         } else {
             EnvelopeDir::Increase
         };
-        self.sweep_pace = value & 0b111;
+        self.pace = value & 0b111;
     }
 }
 
@@ -236,6 +236,7 @@ struct Channel1 {
     enable: bool,
     cycles: u16,
     wave_idx: usize,
+    volume: u8,
     sweep: Sweep,
     wave_duty_timer_len: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
@@ -247,6 +248,7 @@ struct Channel2 {
     enable: bool,
     cycles: u16,
     wave_idx: usize,
+    volume: u8,
     wave_duty_timer_len: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
     wavelen_ctrl: WavelenCtrl,
@@ -327,7 +329,8 @@ pub(crate) struct Apu {
     ch_3: Channel3,
     ch_4: Channel4,
     div: u8,
-    amplitude: i32,
+    amplitude_left: i32,
+    amplitude_right: i32,
 }
 
 impl Apu {
@@ -404,7 +407,33 @@ impl Apu {
             }
         }
         // Tick enveloppe sweep.
-        if self.div & 0b111 == 0 {}
+        if self.div & 0b111 == 0 {
+            if self.ch_1.vol_env.pace != 0 && (self.div % self.ch_1.vol_env.pace) == 0 {
+                match self.ch_1.vol_env.direction {
+                    EnvelopeDir::Increase => {
+                        self.ch_1.volume = u8::max(self.ch_1.volume + 1, 0b1111)
+                    }
+                    EnvelopeDir::Decrease => {
+                        if self.ch_1.volume > 0 {
+                            self.ch_1.volume -= 1;
+                        }
+                    }
+                }
+            }
+
+            if self.ch_2.vol_env.pace != 0 && (self.div % self.ch_2.vol_env.pace) == 0 {
+                match self.ch_2.vol_env.direction {
+                    EnvelopeDir::Increase => {
+                        self.ch_2.volume = u8::max(self.ch_2.volume + 1, 0b1111)
+                    }
+                    EnvelopeDir::Decrease => {
+                        if self.ch_2.volume > 0 {
+                            self.ch_2.volume -= 1;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub(crate) fn tick(&mut self) {
@@ -417,6 +446,7 @@ impl Apu {
 
         if self.ch_1.wavelen_ctrl.trigger {
             self.ch_1.wavelen_ctrl.trigger = false;
+            self.ch_1.volume = self.ch_1.vol_env.initial;
             if self.ch_1.enable {
                 self.sound_enable.channels.ch_1 = true;
             }
@@ -424,6 +454,7 @@ impl Apu {
 
         if self.ch_2.wavelen_ctrl.trigger {
             self.ch_2.wavelen_ctrl.trigger = false;
+            self.ch_2.volume = self.ch_2.vol_env.initial;
             if self.ch_2.enable {
                 self.sound_enable.channels.ch_2 = true;
             }
@@ -444,8 +475,7 @@ impl Apu {
                 self.ch_1.wave_idx = (self.ch_1.wave_idx + 1) % 8;
             }
             let val = if self.ch_1.wave_duty_timer_len.wave_duty.waveform()[self.ch_1.wave_idx] {
-                // TODO: Enveloppe
-                0b1111
+                self.ch_1.volume as i32
             } else {
                 0
             };
@@ -457,11 +487,11 @@ impl Apu {
         let amp_ch2 = if self.sound_enable.channels.ch_2 {
             self.ch_2.cycles += 1;
             if self.ch_2.cycles == Self::WAVELEN_MAX {
-                self.ch_2.cycles = self.ch_1.wavelen_ctrl.wavelen;
+                self.ch_2.cycles = self.ch_2.wavelen_ctrl.wavelen;
                 self.ch_2.wave_idx = (self.ch_2.wave_idx + 1) % 8;
             }
             let val = if self.ch_2.wave_duty_timer_len.wave_duty.waveform()[self.ch_2.wave_idx] {
-                0b1111
+                self.ch_2.volume as i32
             } else {
                 0
             };
@@ -492,20 +522,31 @@ impl Apu {
                 } else {
                     sample >> (self.ch_3.out_level - 1)
                 };
-                // TODO: Find proper remapping.
                 -(sample as i32) + 8
             } else {
                 0
             };
 
-            let amp_ch3 = 0;
-            let amplitude = (amp_ch1 + amp_ch2 + amp_ch3 + amp_ch4) * (i32::MAX / 2i32.pow(18));
-            let delta = amplitude - self.amplitude;
-            self.amplitude = amplitude;
+            let l = &self.sound_panning.left;
+            let r = &self.sound_panning.right;
+            let mut amplitude_left = if l.ch_1 { amp_ch1 } else { 0 }
+                + if l.ch_2 { amp_ch2 } else { 0 }
+                + if l.ch_3 { amp_ch3 } else { 0 }
+                + if l.ch_4 { amp_ch4 } else { 0 };
+            amplitude_left *= 1 << 8;
+            let delta_left = amplitude_left - self.amplitude_left;
+            self.amplitude_left = amplitude_left;
+            let mut amplitude_right = if r.ch_1 { amp_ch1 } else { 0 }
+                + if r.ch_2 { amp_ch2 } else { 0 }
+                + if r.ch_3 { amp_ch3 } else { 0 }
+                + if r.ch_4 { amp_ch4 } else { 0 };
+            amplitude_right *= 1 << 8;
+            let delta_right = amplitude_right - self.amplitude_right;
+            self.amplitude_right = amplitude_right;
 
-            if delta != 0 {
-                self.left_deltas[self.delta_count] = delta;
-                self.right_deltas[self.delta_count] = delta;
+            if delta_left != 0 || delta_right != 0 {
+                self.left_deltas[self.delta_count] = delta_left;
+                self.right_deltas[self.delta_count] = delta_right;
                 self.delta_offsets[self.delta_count] = self.delta_offset;
                 self.delta_count += 1;
             }
