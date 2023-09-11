@@ -156,7 +156,7 @@ impl WaveDuty {
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct WaveDutyTimerLen {
     wave_duty: WaveDuty,
-    init_len_timer: u8,
+    len_timer: u8,
 }
 
 impl WaveDutyTimerLen {
@@ -174,7 +174,7 @@ impl WaveDutyTimerLen {
             _ => unreachable!(),
         };
 
-        self.init_len_timer = value & 0b11111;
+        self.len_timer = value & 0b11111;
     }
 }
 
@@ -211,18 +211,18 @@ impl VolumeEnvelope {
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct WavelenCtrl {
     trigger: bool,
-    sound_len_enable: bool,
+    len_enable: bool,
     wavelen: u16,
 }
 impl WavelenCtrl {
     fn value_ctrl(&self) -> u8 {
         // TODO check unused/write only bits read value
-        (self.sound_len_enable as u8) << 6
+        (self.len_enable as u8) << 6
     }
 
     fn set_value_wavelen_h_ctrl(&mut self, value: u8) {
         self.trigger = value & 0b1000_0000 != 0;
-        self.sound_len_enable = value & 0b100_0000 != 0;
+        self.len_enable = value & 0b100_0000 != 0;
         self.wavelen = (self.wavelen & 0x00FF) | ((value as u16 & 0b111) << 8);
     }
 
@@ -238,7 +238,7 @@ struct Channel1 {
     wave_idx: usize,
     volume: u8,
     sweep: Sweep,
-    wave_duty_timer_len: WaveDutyTimerLen,
+    wave_duty_len_timer: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
     wavelen_ctrl: WavelenCtrl,
 }
@@ -249,7 +249,7 @@ struct Channel2 {
     cycles: u16,
     wave_idx: usize,
     volume: u8,
-    wave_duty_timer_len: WaveDutyTimerLen,
+    wave_duty_len_timer: WaveDutyTimerLen,
     vol_env: VolumeEnvelope,
     wavelen_ctrl: WavelenCtrl,
 }
@@ -308,10 +308,11 @@ impl FreqRand {
 struct Channel4 {
     enable: bool,
     len_timer: u8,
+    volume: u8,
     vol_env: VolumeEnvelope,
     freq_rand: FreqRand,
     trigger: bool,
-    sound_len_enable: bool,
+    len_enable: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -375,11 +376,33 @@ impl Apu {
     pub(crate) fn inc_div(&mut self) {
         self.div = self.div.wrapping_add(1);
         // Tick sound length.
-        if self.div & 0b1 == 0 {
-            self.ch_3.len_timer = u8::min(self.ch_3.len_timer + 1, 64);
-            if self.ch_3.len_timer == 64 && self.ch_3.wavelen_ctrl.sound_len_enable {
-                self.sound_enable.channels.ch_3 = false;
-            }
+        if self.div & 0b10 == 0 {
+            let tick_len = |len_timer: &mut u8, len_enable, ch_enable: &mut bool| {
+                *len_timer = u8::min(*len_timer + 1, 64);
+                if *len_timer == 64 && len_enable {
+                    *ch_enable = false;
+                }
+            };
+            tick_len(
+                &mut self.ch_1.wave_duty_len_timer.len_timer,
+                self.ch_1.wavelen_ctrl.len_enable,
+                &mut self.sound_enable.channels.ch_1,
+            );
+            tick_len(
+                &mut self.ch_2.wave_duty_len_timer.len_timer,
+                self.ch_2.wavelen_ctrl.len_enable,
+                &mut self.sound_enable.channels.ch_2,
+            );
+            tick_len(
+                &mut self.ch_3.len_timer,
+                self.ch_3.wavelen_ctrl.len_enable,
+                &mut self.sound_enable.channels.ch_3,
+            );
+            tick_len(
+                &mut self.ch_4.len_timer,
+                self.ch_4.len_enable,
+                &mut self.sound_enable.channels.ch_4,
+            );
         }
         // Tick channel 1 frequency sweep.
         if self.div & 0b11 == 0
@@ -391,7 +414,7 @@ impl Apu {
                 self.ch_1.wavelen_ctrl.wavelen / 2u16.pow(self.ch_1.sweep.slope_ctrl as u32);
             match self.ch_1.sweep.op {
                 SweepOp::Increase => {
-                    if self.ch_1.wavelen_ctrl.wavelen + offset >= 0b1000_0000_0000 {
+                    if self.ch_1.wavelen_ctrl.wavelen + offset >= Self::WAVELEN_MAX {
                         self.ch_1.enable = false;
                     } else {
                         self.ch_1.wavelen_ctrl.wavelen += offset;
@@ -408,6 +431,22 @@ impl Apu {
         }
         // Tick enveloppe sweep.
         if self.div & 0b111 == 0 {
+            let tick_enveloppe = |vol_env: &VolumeEnvelope, volume: &mut u8| {
+                if vol_env.pace != 0 && (self.div % vol_env.pace) == 0 {
+                    match vol_env.direction {
+                        EnvelopeDir::Increase => *volume = u8::max(*volume + 1, 0b1111),
+                        EnvelopeDir::Decrease => {
+                            if *volume > 0 {
+                                *volume -= 1;
+                            }
+                        }
+                    }
+                }
+            };
+            tick_enveloppe(&self.ch_1.vol_env, &mut self.ch_1.volume);
+            tick_enveloppe(&self.ch_2.vol_env, &mut self.ch_2.volume);
+            tick_enveloppe(&self.ch_4.vol_env, &mut self.ch_4.volume);
+
             if self.ch_1.vol_env.pace != 0 && (self.div % self.ch_1.vol_env.pace) == 0 {
                 match self.ch_1.vol_env.direction {
                     EnvelopeDir::Increase => {
@@ -447,6 +486,7 @@ impl Apu {
         if self.ch_1.wavelen_ctrl.trigger {
             self.ch_1.wavelen_ctrl.trigger = false;
             self.ch_1.volume = self.ch_1.vol_env.initial;
+            self.ch_1.wave_idx = 0;
             if self.ch_1.enable {
                 self.sound_enable.channels.ch_1 = true;
             }
@@ -455,6 +495,7 @@ impl Apu {
         if self.ch_2.wavelen_ctrl.trigger {
             self.ch_2.wavelen_ctrl.trigger = false;
             self.ch_2.volume = self.ch_2.vol_env.initial;
+            self.ch_2.wave_idx = 0;
             if self.ch_2.enable {
                 self.sound_enable.channels.ch_2 = true;
             }
@@ -474,7 +515,7 @@ impl Apu {
                 self.ch_1.cycles = self.ch_1.wavelen_ctrl.wavelen;
                 self.ch_1.wave_idx = (self.ch_1.wave_idx + 1) % 8;
             }
-            let val = if self.ch_1.wave_duty_timer_len.wave_duty.waveform()[self.ch_1.wave_idx] {
+            let val = if self.ch_1.wave_duty_len_timer.wave_duty.waveform()[self.ch_1.wave_idx] {
                 self.ch_1.volume as i32
             } else {
                 0
@@ -490,7 +531,7 @@ impl Apu {
                 self.ch_2.cycles = self.ch_2.wavelen_ctrl.wavelen;
                 self.ch_2.wave_idx = (self.ch_2.wave_idx + 1) % 8;
             }
-            let val = if self.ch_2.wave_duty_timer_len.wave_duty.waveform()[self.ch_2.wave_idx] {
+            let val = if self.ch_2.wave_duty_len_timer.wave_duty.waveform()[self.ch_2.wave_idx] {
                 self.ch_2.volume as i32
             } else {
                 0
@@ -529,18 +570,20 @@ impl Apu {
 
             let l = &self.sound_panning.left;
             let r = &self.sound_panning.right;
-            let mut amplitude_left = if l.ch_1 { amp_ch1 } else { 0 }
+            let amplitude_left = (if l.ch_1 { amp_ch1 } else { 0 }
                 + if l.ch_2 { amp_ch2 } else { 0 }
                 + if l.ch_3 { amp_ch3 } else { 0 }
-                + if l.ch_4 { amp_ch4 } else { 0 };
-            amplitude_left *= 1 << 8;
+                + if l.ch_4 { amp_ch4 } else { 0 })
+                * self.master_vol_vin_pan.left_volume as i32
+                * (1 << 6);
             let delta_left = amplitude_left - self.amplitude_left;
             self.amplitude_left = amplitude_left;
-            let mut amplitude_right = if r.ch_1 { amp_ch1 } else { 0 }
+            let amplitude_right = (if r.ch_1 { amp_ch1 } else { 0 }
                 + if r.ch_2 { amp_ch2 } else { 0 }
                 + if r.ch_3 { amp_ch3 } else { 0 }
-                + if r.ch_4 { amp_ch4 } else { 0 };
-            amplitude_right *= 1 << 8;
+                + if r.ch_4 { amp_ch4 } else { 0 })
+                * self.master_vol_vin_pan.right_volume as i32
+                * (1 << 6);
             let delta_right = amplitude_right - self.amplitude_right;
             self.amplitude_right = amplitude_right;
 
@@ -568,13 +611,13 @@ impl Apu {
     pub(crate) fn read(&self, address: u16) -> u8 {
         match address {
             Self::CH1_SWEEP_ADDRESS => self.ch_1.sweep.value(),
-            Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_1.wave_duty_timer_len.value(),
+            Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_1.wave_duty_len_timer.value(),
             Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.ch_1.vol_env.value(),
             Self::CH1_WAVELEN_LOW_ADDRESS => 0xFF,
             Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => self.ch_1.wavelen_ctrl.value_ctrl(),
 
             Self::CH2_UNUSED_ADDRESS => 0xFF,
-            Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_2.wave_duty_timer_len.value(),
+            Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_2.wave_duty_len_timer.value(),
             Self::CH2_VOLUME_ENVELOPPE_ADDRESS => self.ch_2.vol_env.value(),
             Self::CH2_WAVELEN_LOW_ADDRESS => 0xFF,
             Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => self.ch_2.wavelen_ctrl.value_ctrl(),
@@ -582,7 +625,7 @@ impl Apu {
             Self::CH4_LEN_TIMER_ADDRESS => self.ch_4.len_timer & 0b11_1111,
             Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.ch_4.vol_env.value(),
             Self::CH4_FREQ_RAND_ADDRESS => self.ch_4.freq_rand.value(),
-            Self::CH4_CTRL_ADDRESS => (self.ch_4.sound_len_enable as u8) << 6,
+            Self::CH4_CTRL_ADDRESS => (self.ch_4.len_enable as u8) << 6,
 
             Self::CH3_ENABLE_ADDRESS => (self.ch_3.enable as u8) << 7,
             Self::CH3_LEN_TIMER_ADDRESS => 0xFF,
@@ -604,7 +647,7 @@ impl Apu {
         match address {
             Self::CH1_SWEEP_ADDRESS => self.ch_1.sweep.set_value(value),
             Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.ch_1.vol_env.set_value(value),
-            Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_1.wave_duty_timer_len.set_value(value),
+            Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_1.wave_duty_len_timer.set_value(value),
             Self::CH1_WAVELEN_LOW_ADDRESS => self.ch_1.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => {
                 self.ch_1.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
@@ -612,7 +655,7 @@ impl Apu {
 
             Self::CH2_UNUSED_ADDRESS => {}
             Self::CH2_VOLUME_ENVELOPPE_ADDRESS => self.ch_2.vol_env.set_value(value),
-            Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_2.wave_duty_timer_len.set_value(value),
+            Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_2.wave_duty_len_timer.set_value(value),
             Self::CH2_WAVELEN_LOW_ADDRESS => self.ch_2.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => {
                 self.ch_2.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
@@ -623,7 +666,7 @@ impl Apu {
             Self::CH4_FREQ_RAND_ADDRESS => self.ch_4.freq_rand.set_value(value),
             Self::CH4_CTRL_ADDRESS => {
                 self.ch_4.trigger = value & 0b1000_0000 != 0;
-                self.ch_4.sound_len_enable = value & 0b100_0000 != 0;
+                self.ch_4.len_enable = value & 0b100_0000 != 0;
             }
 
             Self::CH3_ENABLE_ADDRESS => {
