@@ -374,12 +374,11 @@ impl Apu {
     }
 
     pub(crate) fn inc_div(&mut self) {
-        self.div = self.div.wrapping_add(1);
         // Tick sound length.
-        if self.div & 0b10 == 0 {
-            let tick_len = |len_timer: &mut u8, len_enable, ch_enable: &mut bool| {
-                *len_timer = u8::min(*len_timer + 1, 64);
-                if *len_timer == 64 && len_enable {
+        if self.div & 0b1 == 0 {
+            let tick_len = |len_timer: &mut u8, len_enable, ch_enable: &mut bool, limit| {
+                *len_timer = u8::min(*len_timer + 1, limit);
+                if *len_timer == limit && len_enable {
                     *ch_enable = false;
                 }
             };
@@ -387,23 +386,28 @@ impl Apu {
                 &mut self.ch_1.wave_duty_len_timer.len_timer,
                 self.ch_1.wavelen_ctrl.len_enable,
                 &mut self.sound_enable.channels.ch_1,
+                0b11_1111,
             );
             tick_len(
                 &mut self.ch_2.wave_duty_len_timer.len_timer,
                 self.ch_2.wavelen_ctrl.len_enable,
                 &mut self.sound_enable.channels.ch_2,
+                0b11_1111,
             );
             tick_len(
                 &mut self.ch_3.len_timer,
                 self.ch_3.wavelen_ctrl.len_enable,
                 &mut self.sound_enable.channels.ch_3,
+                u8::MAX,
             );
             tick_len(
                 &mut self.ch_4.len_timer,
                 self.ch_4.len_enable,
                 &mut self.sound_enable.channels.ch_4,
+                0b11_1111,
             );
         }
+
         // Tick channel 1 frequency sweep.
         if self.div & 0b11 == 0
             && self.ch_1.sweep.pace != 0
@@ -429,6 +433,7 @@ impl Apu {
                 }
             }
         }
+
         // Tick enveloppe sweep.
         if self.div & 0b111 == 0 {
             let tick_enveloppe = |vol_env: &VolumeEnvelope, volume: &mut u8| {
@@ -446,33 +451,9 @@ impl Apu {
             tick_enveloppe(&self.ch_1.vol_env, &mut self.ch_1.volume);
             tick_enveloppe(&self.ch_2.vol_env, &mut self.ch_2.volume);
             tick_enveloppe(&self.ch_4.vol_env, &mut self.ch_4.volume);
-
-            if self.ch_1.vol_env.pace != 0 && (self.div % self.ch_1.vol_env.pace) == 0 {
-                match self.ch_1.vol_env.direction {
-                    EnvelopeDir::Increase => {
-                        self.ch_1.volume = u8::max(self.ch_1.volume + 1, 0b1111)
-                    }
-                    EnvelopeDir::Decrease => {
-                        if self.ch_1.volume > 0 {
-                            self.ch_1.volume -= 1;
-                        }
-                    }
-                }
-            }
-
-            if self.ch_2.vol_env.pace != 0 && (self.div % self.ch_2.vol_env.pace) == 0 {
-                match self.ch_2.vol_env.direction {
-                    EnvelopeDir::Increase => {
-                        self.ch_2.volume = u8::max(self.ch_2.volume + 1, 0b1111)
-                    }
-                    EnvelopeDir::Decrease => {
-                        if self.ch_2.volume > 0 {
-                            self.ch_2.volume -= 1;
-                        }
-                    }
-                }
-            }
         }
+
+        self.div = self.div.wrapping_add(1);
     }
 
     pub(crate) fn tick(&mut self) {
@@ -644,6 +625,14 @@ impl Apu {
     }
 
     pub(crate) fn write(&mut self, address: u16, value: u8) {
+        // Ignore register writes when APU is turned off.
+        if !self.sound_enable.all
+            && address != Self::SOUND_ENABLE_ADDRESS
+            && !(Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS)
+                .contains(&address)
+        {
+            return;
+        }
         match address {
             Self::CH1_SWEEP_ADDRESS => self.ch_1.sweep.set_value(value),
             Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.ch_1.vol_env.set_value(value),

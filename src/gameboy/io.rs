@@ -166,7 +166,8 @@ impl Timer {
         self.divider = self.divider.wrapping_add(4);
 
         // Bit 4 high to low
-        let apu_inc_div = self.divider == 0b10_0000 || self.apu_inc_div;
+        let apu_inc_div =
+            (old_divider & 0b1_0000) != 0 && (self.divider & 0b1_0000) == 0 || self.apu_inc_div;
         self.apu_inc_div = false;
 
         if !self.enabled {
