@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use super::cpu::Cpu;
 
+// TODO: Find write only/unused bit read value
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct ChannelToggles {
     ch_1: bool,
@@ -50,13 +52,13 @@ impl ChannelToggles {
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct SoundEnable {
     channels: ChannelToggles,
-    all: bool,
+    enable_apu: bool,
 }
 
 impl SoundEnable {
     fn value(&self) -> u8 {
         // TODO find out unused bits behaviour
-        (self.all as u8) << 7 | self.channels.value()
+        (self.enable_apu as u8) << 7 | self.channels.value()
     }
 }
 
@@ -115,7 +117,7 @@ struct Sweep {
 }
 impl Sweep {
     fn value(&self) -> u8 {
-        self.pace & 0b111 << 4 | (self.op as u8) << 3 | self.slope_ctrl & 0b111
+        0b1000_0000 | self.pace & 0b111 << 4 | (self.op as u8) << 3 | self.slope_ctrl & 0b111
     }
 
     fn set_value(&mut self, value: u8) {
@@ -161,8 +163,7 @@ struct WaveDutyTimerLen {
 
 impl WaveDutyTimerLen {
     fn value(&self) -> u8 {
-        // TODO: check low bits value
-        (self.wave_duty as u8) << 6
+        (self.wave_duty as u8) << 6 | 0b11_1111
     }
 
     fn set_value(&mut self, value: u8) {
@@ -174,7 +175,7 @@ impl WaveDutyTimerLen {
             _ => unreachable!(),
         };
 
-        self.len_timer = value & 0b11111;
+        self.len_timer = value & 0b11_1111;
     }
 }
 
@@ -214,10 +215,10 @@ struct WavelenCtrl {
     len_enable: bool,
     wavelen: u16,
 }
+
 impl WavelenCtrl {
     fn value_ctrl(&self) -> u8 {
-        // TODO check unused/write only bits read value
-        (self.len_enable as u8) << 6
+        (self.len_enable as u8) << 6 | 0b1011_1111
     }
 
     fn set_value_wavelen_h_ctrl(&mut self, value: u8) {
@@ -347,16 +348,17 @@ impl Apu {
     const CH2_WAVELEN_LOW_ADDRESS: u16 = 0xFF18;
     const CH2_WAVELEN_HIGH_CTRL_ADDRESS: u16 = 0xFF19;
 
-    const CH4_LEN_TIMER_ADDRESS: u16 = 0xFF20;
-    const CH4_VOLUME_ENVELOPPE_ADDRESS: u16 = 0xFF21;
-    const CH4_FREQ_RAND_ADDRESS: u16 = 0xFF22;
-    const CH4_CTRL_ADDRESS: u16 = 0xFF23;
-
     const CH3_ENABLE_ADDRESS: u16 = 0xFF1A;
     const CH3_LEN_TIMER_ADDRESS: u16 = 0xFF1B;
     const CH3_OUT_LEVEL_ADDRESS: u16 = 0xFF1C;
     const CH3_WAVELEN_LOW_ADDRESS: u16 = 0xFF1D;
     const CH3_WAVELEN_HIGH_CTRL_ADDRESS: u16 = 0xFF1E;
+
+    const CH4_UNUSED_ADDRESS: u16 = 0xFF1F;
+    const CH4_LEN_TIMER_ADDRESS: u16 = 0xFF20;
+    const CH4_VOLUME_ENVELOPPE_ADDRESS: u16 = 0xFF21;
+    const CH4_FREQ_RAND_ADDRESS: u16 = 0xFF22;
+    const CH4_CTRL_ADDRESS: u16 = 0xFF23;
 
     const MASTER_VOL_VIN_PAN_ADDRESS: u16 = 0xFF24;
     const SOUND_PANNING_ADDRESS: u16 = 0xFF25;
@@ -462,6 +464,10 @@ impl Apu {
             // Samples were not fetched, we skip them.
             self.delta_count = 0;
             self.delta_offset = 0;
+        }
+
+        if !self.sound_enable.enable_apu {
+            return;
         }
 
         if self.ch_1.wavelen_ctrl.trigger {
@@ -603,19 +609,20 @@ impl Apu {
             Self::CH2_WAVELEN_LOW_ADDRESS => 0xFF,
             Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => self.ch_2.wavelen_ctrl.value_ctrl(),
 
-            Self::CH4_LEN_TIMER_ADDRESS => self.ch_4.len_timer & 0b11_1111,
-            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.ch_4.vol_env.value(),
-            Self::CH4_FREQ_RAND_ADDRESS => self.ch_4.freq_rand.value(),
-            Self::CH4_CTRL_ADDRESS => (self.ch_4.len_enable as u8) << 6,
-
-            Self::CH3_ENABLE_ADDRESS => (self.ch_3.enable as u8) << 7,
+            Self::CH3_ENABLE_ADDRESS => (self.ch_3.enable as u8) << 7 | 0b0111_1111,
             Self::CH3_LEN_TIMER_ADDRESS => 0xFF,
-            Self::CH3_OUT_LEVEL_ADDRESS => (self.ch_3.out_level & 0b11) << 5,
+            Self::CH3_OUT_LEVEL_ADDRESS => 0b1001_1111 | (self.ch_3.out_level & 0b11) << 5,
             Self::CH3_WAVELEN_LOW_ADDRESS => 0xFF,
             Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => self.ch_3.wavelen_ctrl.value_ctrl(),
             Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS => {
                 self.ch_3.wave_pattern[(address & 0xF) as usize]
             }
+
+            Self::CH4_UNUSED_ADDRESS => 0xFF,
+            Self::CH4_LEN_TIMER_ADDRESS => 0b1100_0000 | (self.ch_4.len_timer & 0b11_1111),
+            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.ch_4.vol_env.value(),
+            Self::CH4_FREQ_RAND_ADDRESS => self.ch_4.freq_rand.value(),
+            Self::CH4_CTRL_ADDRESS => (self.ch_4.len_enable as u8) << 6,
 
             Self::MASTER_VOL_VIN_PAN_ADDRESS => self.master_vol_vin_pan.value(),
             Self::SOUND_PANNING_ADDRESS => self.sound_panning.value(),
@@ -626,7 +633,7 @@ impl Apu {
 
     pub(crate) fn write(&mut self, address: u16, value: u8) {
         // Ignore register writes when APU is turned off.
-        if !self.sound_enable.all
+        if !self.sound_enable.enable_apu
             && address != Self::SOUND_ENABLE_ADDRESS
             && !(Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS)
                 .contains(&address)
@@ -650,14 +657,6 @@ impl Apu {
                 self.ch_2.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
             }
 
-            Self::CH4_LEN_TIMER_ADDRESS => self.ch_4.len_timer = value & 0b11_1111,
-            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.ch_4.vol_env.set_value(value),
-            Self::CH4_FREQ_RAND_ADDRESS => self.ch_4.freq_rand.set_value(value),
-            Self::CH4_CTRL_ADDRESS => {
-                self.ch_4.trigger = value & 0b1000_0000 != 0;
-                self.ch_4.len_enable = value & 0b100_0000 != 0;
-            }
-
             Self::CH3_ENABLE_ADDRESS => {
                 self.ch_3.enable = value & 0b1000_0000 != 0;
                 self.sound_enable.channels.ch_3 = self.ch_3.enable;
@@ -672,11 +671,20 @@ impl Apu {
                 self.ch_3.wave_pattern[(address & 0xF) as usize] = value
             }
 
+            Self::CH4_UNUSED_ADDRESS => {}
+            Self::CH4_LEN_TIMER_ADDRESS => self.ch_4.len_timer = value & 0b11_1111,
+            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.ch_4.vol_env.set_value(value),
+            Self::CH4_FREQ_RAND_ADDRESS => self.ch_4.freq_rand.set_value(value),
+            Self::CH4_CTRL_ADDRESS => {
+                self.ch_4.trigger = value & 0b1000_0000 != 0;
+                self.ch_4.len_enable = value & 0b100_0000 != 0;
+            }
+
             Self::MASTER_VOL_VIN_PAN_ADDRESS => self.master_vol_vin_pan.set_value(value),
             Self::SOUND_PANNING_ADDRESS => self.sound_panning.set_value(value),
             Self::SOUND_ENABLE_ADDRESS => {
-                self.sound_enable.all = value >> 7 != 0;
-                if self.sound_enable.all {
+                self.sound_enable.enable_apu = value >> 7 != 0;
+                if self.sound_enable.enable_apu {
                     self.ch_1 = Default::default();
                     self.ch_1.enable = true;
                     self.ch_2 = Default::default();
@@ -684,9 +692,9 @@ impl Apu {
                     self.ch_3.reset();
                     self.ch_4 = Default::default();
                     self.ch_4.enable = true;
-                    self.sound_enable.channels = ChannelToggles::off();
-                } else {
                     self.sound_enable.channels = ChannelToggles::on();
+                } else {
+                    self.sound_enable.channels = ChannelToggles::off();
                 }
             }
             _ => unreachable!("Tried to write invalid address {address:04X} in apu"),
