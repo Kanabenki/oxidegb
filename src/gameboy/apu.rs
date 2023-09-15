@@ -13,24 +13,6 @@ struct ChannelToggles {
 }
 
 impl ChannelToggles {
-    fn off() -> Self {
-        Self {
-            ch_1: false,
-            ch_2: false,
-            ch_3: false,
-            ch_4: false,
-        }
-    }
-
-    fn on() -> Self {
-        Self {
-            ch_1: true,
-            ch_2: true,
-            ch_3: true,
-            ch_4: true,
-        }
-    }
-
     fn value(&self) -> u8 {
         self.ch_1 as u8 | (self.ch_2 as u8) << 1 | (self.ch_3 as u8) << 2 | (self.ch_4 as u8) << 3
     }
@@ -57,8 +39,7 @@ struct SoundEnable {
 
 impl SoundEnable {
     fn value(&self) -> u8 {
-        // TODO find out unused bits behaviour
-        (self.enable_apu as u8) << 7 | self.channels.value()
+        (self.enable_apu as u8) << 7 | 0b111_0000 | self.channels.value()
     }
 }
 
@@ -234,7 +215,6 @@ impl WavelenCtrl {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel1 {
-    enable: bool,
     cycles: u16,
     wave_idx: usize,
     volume: u8,
@@ -246,7 +226,6 @@ struct Channel1 {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel2 {
-    enable: bool,
     cycles: u16,
     wave_idx: usize,
     volume: u8,
@@ -269,7 +248,6 @@ struct Channel3 {
 impl Channel3 {
     fn reset(&mut self) {
         *self = Self {
-            enable: true,
             wave_pattern: self.wave_pattern,
             ..Default::default()
         };
@@ -307,7 +285,6 @@ impl FreqRand {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel4 {
-    enable: bool,
     len_timer: u8,
     volume: u8,
     vol_env: VolumeEnvelope,
@@ -424,14 +401,14 @@ impl Apu {
             match self.ch_1.sweep.op {
                 SweepOp::Increase => {
                     if self.ch_1.wavelen_ctrl.wavelen + offset >= Self::WAVELEN_MAX {
-                        self.ch_1.enable = false;
+                        self.sound_enable.channels.ch_1 = false;
                     } else {
                         self.ch_1.wavelen_ctrl.wavelen += offset;
                     }
                 }
                 SweepOp::Decrease => {
                     if offset > self.ch_1.wavelen_ctrl.wavelen {
-                        self.ch_1.enable = false;
+                        self.sound_enable.channels.ch_1 = false;
                     } else {
                         self.ch_1.wavelen_ctrl.wavelen -= offset;
                     }
@@ -477,26 +454,20 @@ impl Apu {
             self.ch_1.wavelen_ctrl.trigger = false;
             self.ch_1.volume = self.ch_1.vol_env.initial;
             self.ch_1.wave_idx = 0;
-            if self.ch_1.enable {
-                self.sound_enable.channels.ch_1 = true;
-            }
+            self.sound_enable.channels.ch_1 = true;
         }
 
         if self.ch_2.wavelen_ctrl.trigger {
             self.ch_2.wavelen_ctrl.trigger = false;
             self.ch_2.volume = self.ch_2.vol_env.initial;
             self.ch_2.wave_idx = 0;
-            if self.ch_2.enable {
-                self.sound_enable.channels.ch_2 = true;
-            }
+            self.sound_enable.channels.ch_2 = true;
         }
 
-        if self.ch_3.wavelen_ctrl.trigger {
+        if self.ch_3.enable && self.ch_3.wavelen_ctrl.trigger {
             self.ch_3.wavelen_ctrl.trigger = false;
             self.ch_3.wave_pattern_index = 0;
-            if self.ch_3.enable {
-                self.sound_enable.channels.ch_3 = true;
-            }
+            self.sound_enable.channels.ch_3 = true;
         }
 
         let amp_ch1 = if self.sound_enable.channels.ch_1 {
@@ -688,17 +659,13 @@ impl Apu {
             Self::SOUND_PANNING_ADDRESS => self.sound_panning.set_value(value),
             Self::SOUND_ENABLE_ADDRESS => {
                 self.sound_enable.enable_apu = value >> 7 != 0;
-                if self.sound_enable.enable_apu {
+                if !self.sound_enable.enable_apu {
                     self.ch_1 = Default::default();
-                    self.ch_1.enable = true;
                     self.ch_2 = Default::default();
-                    self.ch_2.enable = true;
                     self.ch_3.reset();
                     self.ch_4 = Default::default();
-                    self.ch_4.enable = true;
-                    self.sound_enable.channels = ChannelToggles::on();
-                } else {
-                    self.sound_enable.channels = ChannelToggles::off();
+                    self.master_vol_vin_pan = Default::default();
+                    self.sound_panning = Default::default();
                 }
             }
             Self::UNUSED_START_ADDRESS..=Self::UNUSED_END_ADDRESS => {}
