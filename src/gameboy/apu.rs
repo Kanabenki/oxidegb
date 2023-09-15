@@ -70,7 +70,7 @@ struct SoundPanning {
 
 impl SoundPanning {
     fn value(&self) -> u8 {
-        self.left.value() << 4 | self.right.value()
+        self.left.value() << 4 | (self.right.value() & 0b1111)
     }
 
     fn set_value(&mut self, value: u8) {
@@ -117,7 +117,7 @@ struct Sweep {
 }
 impl Sweep {
     fn value(&self) -> u8 {
-        0b1000_0000 | self.pace & 0b111 << 4 | (self.op as u8) << 3 | self.slope_ctrl & 0b111
+        0b1000_0000 | (self.pace & 0b111) << 4 | (self.op as u8) << 3 | self.slope_ctrl & 0b111
     }
 
     fn set_value(&mut self, value: u8) {
@@ -363,6 +363,9 @@ impl Apu {
     const MASTER_VOL_VIN_PAN_ADDRESS: u16 = 0xFF24;
     const SOUND_PANNING_ADDRESS: u16 = 0xFF25;
     const SOUND_ENABLE_ADDRESS: u16 = 0xFF26;
+
+    const UNUSED_START_ADDRESS: u16 = 0xFF27;
+    const UNUSED_END_ADDRESS: u16 = 0xFF2F;
 
     const CH3_WAVE_PATTERN_START_ADDRESS: u16 = 0xFF30;
     const CH3_WAVE_PATTERN_END_ADDRESS: u16 = 0xFF3F;
@@ -619,14 +622,15 @@ impl Apu {
             }
 
             Self::CH4_UNUSED_ADDRESS => 0xFF,
-            Self::CH4_LEN_TIMER_ADDRESS => 0b1100_0000 | (self.ch_4.len_timer & 0b11_1111),
+            Self::CH4_LEN_TIMER_ADDRESS => 0xFF,
             Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.ch_4.vol_env.value(),
             Self::CH4_FREQ_RAND_ADDRESS => self.ch_4.freq_rand.value(),
-            Self::CH4_CTRL_ADDRESS => (self.ch_4.len_enable as u8) << 6,
+            Self::CH4_CTRL_ADDRESS => 0b1011_1111 | ((self.ch_4.len_enable as u8) << 6),
 
             Self::MASTER_VOL_VIN_PAN_ADDRESS => self.master_vol_vin_pan.value(),
             Self::SOUND_PANNING_ADDRESS => self.sound_panning.value(),
             Self::SOUND_ENABLE_ADDRESS => self.sound_enable.value(),
+            Self::UNUSED_START_ADDRESS..=Self::UNUSED_END_ADDRESS => 0xFF,
             _ => unreachable!("Tried to read invalid address {address:04X} in apu"),
         }
     }
@@ -697,6 +701,7 @@ impl Apu {
                     self.sound_enable.channels = ChannelToggles::off();
                 }
             }
+            Self::UNUSED_START_ADDRESS..=Self::UNUSED_END_ADDRESS => {}
             _ => unreachable!("Tried to write invalid address {address:04X} in apu"),
         }
     }
