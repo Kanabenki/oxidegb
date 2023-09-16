@@ -167,7 +167,7 @@ impl WaveDutyTimerLen {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Default)]
 enum EnvelopeDir {
     #[default]
     Decrease = 0,
@@ -194,6 +194,10 @@ impl VolumeEnvelope {
             EnvelopeDir::Increase
         };
         self.pace = value & 0b111;
+    }
+
+    fn dac_enabled(&self) -> bool {
+        self.initial != 0 || self.direction != EnvelopeDir::Decrease
     }
 }
 
@@ -267,7 +271,7 @@ impl Channel2 {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel3 {
-    enable: bool,
+    dac_enable: bool,
     cycles: u16,
     len_timer: u16,
     out_level: u8,
@@ -428,7 +432,7 @@ impl Apu {
             tick_len(
                 &mut self.ch_3.len_timer,
                 self.ch_3.wavelen_ctrl.len_enable,
-                &mut self.sound_enable.channels.ch_2,
+                &mut self.sound_enable.channels.ch_3,
             );
             tick_len(
                 &mut self.ch_4.len_timer,
@@ -497,7 +501,7 @@ impl Apu {
             return;
         }
 
-        if self.ch_1.wavelen_ctrl.trigger {
+        if self.ch_1.vol_env.dac_enabled() && self.ch_1.wavelen_ctrl.trigger {
             self.ch_1.wavelen_ctrl.trigger = false;
             self.ch_1.volume = self.ch_1.vol_env.initial;
             self.ch_1.wave_idx = 0;
@@ -507,7 +511,7 @@ impl Apu {
             self.sound_enable.channels.ch_1 = true;
         }
 
-        if self.ch_2.wavelen_ctrl.trigger {
+        if self.ch_2.vol_env.dac_enabled() && self.ch_2.wavelen_ctrl.trigger {
             self.ch_2.wavelen_ctrl.trigger = false;
             self.ch_2.volume = self.ch_2.vol_env.initial;
             self.ch_2.wave_idx = 0;
@@ -517,7 +521,7 @@ impl Apu {
             self.sound_enable.channels.ch_2 = true;
         }
 
-        if self.ch_3.enable && self.ch_3.wavelen_ctrl.trigger {
+        if self.ch_3.dac_enable && self.ch_3.wavelen_ctrl.trigger {
             self.ch_3.wavelen_ctrl.trigger = false;
             self.ch_3.wave_pattern_index = 0;
             if self.ch_3.len_timer == 0 {
@@ -526,7 +530,7 @@ impl Apu {
             self.sound_enable.channels.ch_3 = true;
         }
 
-        if self.ch_4.trigger {
+        if self.ch_4.vol_env.dac_enabled() && self.ch_4.trigger {
             self.ch_4.trigger = false;
             self.ch_4.volume = self.ch_4.vol_env.initial;
             if self.ch_4.len_timer == 0 {
@@ -648,7 +652,7 @@ impl Apu {
             Self::CH2_WAVELEN_LOW_ADDRESS => 0xFF,
             Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => self.ch_2.wavelen_ctrl.value_ctrl(),
 
-            Self::CH3_ENABLE_ADDRESS => (self.ch_3.enable as u8) << 7 | 0b0111_1111,
+            Self::CH3_ENABLE_ADDRESS => (self.ch_3.dac_enable as u8) << 7 | 0b0111_1111,
             Self::CH3_LEN_TIMER_ADDRESS => 0xFF,
             Self::CH3_OUT_LEVEL_ADDRESS => 0b1001_1111 | (self.ch_3.out_level & 0b11) << 5,
             Self::CH3_WAVELEN_LOW_ADDRESS => 0xFF,
@@ -688,7 +692,13 @@ impl Apu {
 
         match address {
             Self::CH1_SWEEP_ADDRESS => self.ch_1.sweep.set_value(value),
-            Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.ch_1.vol_env.set_value(value),
+            Self::CH1_VOLUME_ENVELOPPE_ADDRESS => {
+                self.ch_1.vol_env.set_value(value);
+                dbg!(&self.ch_1.vol_env);
+                if !self.ch_1.vol_env.dac_enabled() {
+                    self.sound_enable.channels.ch_1 = false;
+                }
+            }
             Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_1.wave_duty_len_timer.set_value(value),
             Self::CH1_WAVELEN_LOW_ADDRESS => self.ch_1.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => {
@@ -696,7 +706,12 @@ impl Apu {
             }
 
             Self::CH2_UNUSED_ADDRESS => {}
-            Self::CH2_VOLUME_ENVELOPPE_ADDRESS => self.ch_2.vol_env.set_value(value),
+            Self::CH2_VOLUME_ENVELOPPE_ADDRESS => {
+                self.ch_2.vol_env.set_value(value);
+                if !self.ch_2.vol_env.dac_enabled() {
+                    self.sound_enable.channels.ch_2 = false;
+                }
+            }
             Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_2.wave_duty_len_timer.set_value(value),
             Self::CH2_WAVELEN_LOW_ADDRESS => self.ch_2.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH2_WAVELEN_HIGH_CTRL_ADDRESS => {
@@ -704,8 +719,10 @@ impl Apu {
             }
 
             Self::CH3_ENABLE_ADDRESS => {
-                self.ch_3.enable = value & 0b1000_0000 != 0;
-                self.sound_enable.channels.ch_3 = self.ch_3.enable;
+                self.ch_3.dac_enable = value & 0b1000_0000 != 0;
+                if !self.ch_3.dac_enable {
+                    self.sound_enable.channels.ch_3 = false;
+                }
             }
             Self::CH3_LEN_TIMER_ADDRESS => self.ch_3.len_timer = (!value as u16) + 1,
             Self::CH3_OUT_LEVEL_ADDRESS => self.ch_3.out_level = (value >> 5) & 0b11,
@@ -719,7 +736,12 @@ impl Apu {
 
             Self::CH4_UNUSED_ADDRESS => {}
             Self::CH4_LEN_TIMER_ADDRESS => self.ch_4.len_timer = (!value & 0b11_1111) + 1,
-            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.ch_4.vol_env.set_value(value),
+            Self::CH4_VOLUME_ENVELOPPE_ADDRESS => {
+                self.ch_4.vol_env.set_value(value);
+                if !self.ch_4.vol_env.dac_enabled() {
+                    self.sound_enable.channels.ch_4 = false;
+                }
+            }
             Self::CH4_FREQ_RAND_ADDRESS => self.ch_4.freq_rand.set_value(value),
             Self::CH4_CTRL_ADDRESS => {
                 self.ch_4.trigger = value & 0b1000_0000 != 0;
