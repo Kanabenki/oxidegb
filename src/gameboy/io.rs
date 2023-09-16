@@ -165,9 +165,9 @@ impl Timer {
         let old_divider = self.divider;
         self.divider = self.divider.wrapping_add(4);
 
-        // Bit 4 high to low
+        // DIV bit 4 high to low
         let apu_inc_div =
-            (old_divider & 0b1_0000) != 0 && (self.divider & 0b1_0000) == 0 || self.apu_inc_div;
+            (old_divider & (1 << 12)) != 0 && (self.divider & (1 << 12)) == 0 || self.apu_inc_div;
         self.apu_inc_div = false;
 
         if !self.enabled {
@@ -225,7 +225,7 @@ impl Timer {
                 if self.divider & self.input_clock.bit() != 0 {
                     self.increase_counter();
                 }
-                if self.divider & 0b1_0000 != 0 {
+                if self.divider & (1 << 12) != 0 {
                     self.apu_inc_div = true;
                 }
                 self.divider = 0;

@@ -50,6 +50,7 @@ impl Emulator {
         bootrom: Option<Vec<u8>>,
         rom_path: PathBuf,
         save_path: Option<PathBuf>,
+        should_save: bool,
         fast_forward: bool,
         debug: bool,
     ) -> color_eyre::Result<Self> {
@@ -69,21 +70,25 @@ impl Emulator {
         .build()?;
 
         let save_path = save_path.unwrap_or_else(|| rom_path.with_extension("sav"));
-        let mut save_file = OpenOptions::new();
-        let file_res = save_file.read(true).write(true).open(&save_path);
-        let (save_data, save_file) = match file_res {
-            Ok(mut save_file) => {
-                let mut save_data = vec![];
-                save_file.read_to_end(&mut save_data)?;
-                (Some(save_data), Some(save_file))
+        let (save_data, save_file) = if should_save {
+            let mut save_file = OpenOptions::new();
+            let file_res = save_file.read(true).write(true).open(&save_path);
+            match file_res {
+                Ok(mut save_file) => {
+                    let mut save_data = vec![];
+                    save_file.read_to_end(&mut save_data)?;
+                    (Some(save_data), Some(save_file))
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => (None, None),
+                Err(error) => return Err(error.into()),
             }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => (None, None),
-            Err(error) => return Err(error.into()),
+        } else {
+            (None, None)
         };
 
         let gameboy = Gameboy::new(rom, bootrom, save_data, debug)?;
 
-        let save_file = if gameboy.can_save() {
+        let save_file = if should_save && gameboy.can_save() {
             if save_file.is_some() {
                 save_file
             } else {
@@ -365,6 +370,8 @@ struct Arguments {
     /// The save file path to use. By default, oxidegb will load and save from a sav file with the same base name as the rom file.
     #[arg(short, long)]
     save_file: Option<PathBuf>,
+    #[arg(short, long)]
+    no_save: bool,
     /// The bootrom file to load.
     #[arg(short, long)]
     bootrom_file: Option<PathBuf>,
@@ -393,6 +400,7 @@ fn main() -> color_eyre::Result<()> {
         bootrom,
         arguments.file,
         arguments.save_file,
+        !arguments.no_save,
         arguments.fast_forward,
         arguments.debug,
     )?;

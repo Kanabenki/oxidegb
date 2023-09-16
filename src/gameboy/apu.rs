@@ -1,3 +1,6 @@
+use std::ops::SubAssign;
+
+use num::PrimInt;
 use serde::{Deserialize, Serialize};
 
 use super::cpu::Cpu;
@@ -14,7 +17,10 @@ struct ChannelToggles {
 
 impl ChannelToggles {
     fn value(&self) -> u8 {
-        self.ch_1 as u8 | (self.ch_2 as u8) << 1 | (self.ch_3 as u8) << 2 | (self.ch_4 as u8) << 3
+        ((self.ch_4 as u8) << 3)
+            | ((self.ch_3 as u8) << 2)
+            | ((self.ch_2 as u8) << 1)
+            | (self.ch_1 as u8)
     }
 
     fn from_nibble(nibble: u8) -> Self {
@@ -39,6 +45,7 @@ struct SoundEnable {
 
 impl SoundEnable {
     fn value(&self) -> u8 {
+        //  dbg!(&self);
         (self.enable_apu as u8) << 7 | 0b111_0000 | self.channels.value()
     }
 }
@@ -156,7 +163,7 @@ impl WaveDutyTimerLen {
             _ => unreachable!(),
         };
 
-        self.len_timer = value & 0b11_1111;
+        self.len_timer = (!value & 0b11_1111) + 1;
     }
 }
 
@@ -224,6 +231,18 @@ struct Channel1 {
     wavelen_ctrl: WavelenCtrl,
 }
 
+impl Channel1 {
+    fn reset(&mut self) {
+        *self = Self {
+            wave_duty_len_timer: WaveDutyTimerLen {
+                wave_duty: WaveDuty::W0,
+                len_timer: self.wave_duty_len_timer.len_timer,
+            },
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel2 {
     cycles: u16,
@@ -234,11 +253,23 @@ struct Channel2 {
     wavelen_ctrl: WavelenCtrl,
 }
 
+impl Channel2 {
+    fn reset(&mut self) {
+        *self = Self {
+            wave_duty_len_timer: WaveDutyTimerLen {
+                wave_duty: WaveDuty::W0,
+                len_timer: self.wave_duty_len_timer.len_timer,
+            },
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel3 {
     enable: bool,
     cycles: u16,
-    len_timer: u8,
+    len_timer: u16,
     out_level: u8,
     wavelen_ctrl: WavelenCtrl,
     wave_pattern: [u8; 16],
@@ -248,6 +279,7 @@ struct Channel3 {
 impl Channel3 {
     fn reset(&mut self) {
         *self = Self {
+            len_timer: self.len_timer,
             wave_pattern: self.wave_pattern,
             ..Default::default()
         };
@@ -291,6 +323,15 @@ struct Channel4 {
     freq_rand: FreqRand,
     trigger: bool,
     len_enable: bool,
+}
+
+impl Channel4 {
+    fn reset(&mut self) {
+        *self = Self {
+            len_timer: self.len_timer,
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -356,37 +397,43 @@ impl Apu {
     }
 
     pub(crate) fn inc_div(&mut self) {
+        if !self.sound_enable.enable_apu {
+            return;
+        }
+
         // Tick sound length.
         if self.div & 0b1 == 0 {
-            let tick_len = |len_timer: &mut u8, len_enable, ch_enable: &mut bool, limit| {
-                *len_timer = u8::min(*len_timer + 1, limit);
-                if *len_timer == limit && len_enable {
-                    *ch_enable = false;
+            fn tick_len<N: PrimInt + SubAssign>(
+                len_timer: &mut N,
+                len_enable: bool,
+                ch_enable: &mut bool,
+            ) {
+                if len_enable && *len_timer > N::zero() {
+                    *len_timer -= N::one();
+                    if *len_timer == N::zero() {
+                        *ch_enable = false;
+                    }
                 }
-            };
+            }
             tick_len(
                 &mut self.ch_1.wave_duty_len_timer.len_timer,
                 self.ch_1.wavelen_ctrl.len_enable,
                 &mut self.sound_enable.channels.ch_1,
-                0b11_1111,
             );
             tick_len(
                 &mut self.ch_2.wave_duty_len_timer.len_timer,
                 self.ch_2.wavelen_ctrl.len_enable,
                 &mut self.sound_enable.channels.ch_2,
-                0b11_1111,
             );
             tick_len(
                 &mut self.ch_3.len_timer,
                 self.ch_3.wavelen_ctrl.len_enable,
-                &mut self.sound_enable.channels.ch_3,
-                u8::MAX,
+                &mut self.sound_enable.channels.ch_2,
             );
             tick_len(
                 &mut self.ch_4.len_timer,
                 self.ch_4.len_enable,
                 &mut self.sound_enable.channels.ch_4,
-                0b11_1111,
             );
         }
 
@@ -454,6 +501,9 @@ impl Apu {
             self.ch_1.wavelen_ctrl.trigger = false;
             self.ch_1.volume = self.ch_1.vol_env.initial;
             self.ch_1.wave_idx = 0;
+            if self.ch_1.wave_duty_len_timer.len_timer == 0 {
+                self.ch_1.wave_duty_len_timer.len_timer = 0b100_0000;
+            }
             self.sound_enable.channels.ch_1 = true;
         }
 
@@ -461,13 +511,28 @@ impl Apu {
             self.ch_2.wavelen_ctrl.trigger = false;
             self.ch_2.volume = self.ch_2.vol_env.initial;
             self.ch_2.wave_idx = 0;
+            if self.ch_2.wave_duty_len_timer.len_timer == 0 {
+                self.ch_2.wave_duty_len_timer.len_timer = 0b100_0000;
+            }
             self.sound_enable.channels.ch_2 = true;
         }
 
         if self.ch_3.enable && self.ch_3.wavelen_ctrl.trigger {
             self.ch_3.wavelen_ctrl.trigger = false;
             self.ch_3.wave_pattern_index = 0;
+            if self.ch_3.len_timer == 0 {
+                self.ch_3.len_timer = 0b1_0000_0000;
+            }
             self.sound_enable.channels.ch_3 = true;
+        }
+
+        if self.ch_4.trigger {
+            self.ch_4.trigger = false;
+            self.ch_4.volume = self.ch_4.vol_env.initial;
+            if self.ch_4.len_timer == 0 {
+                self.ch_4.len_timer = 0b100_0000;
+            }
+            self.sound_enable.channels.ch_4 = true;
         }
 
         let amp_ch1 = if self.sound_enable.channels.ch_1 {
@@ -608,13 +673,19 @@ impl Apu {
 
     pub(crate) fn write(&mut self, address: u16, value: u8) {
         // Ignore register writes when APU is turned off.
+        // On DMG models, timer registers are still writable.
         if !self.sound_enable.enable_apu
             && address != Self::SOUND_ENABLE_ADDRESS
+            && address != Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS
+            && address != Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS
+            && address != Self::CH3_LEN_TIMER_ADDRESS
+            && address != Self::CH4_LEN_TIMER_ADDRESS
             && !(Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS)
                 .contains(&address)
         {
             return;
         }
+
         match address {
             Self::CH1_SWEEP_ADDRESS => self.ch_1.sweep.set_value(value),
             Self::CH1_VOLUME_ENVELOPPE_ADDRESS => self.ch_1.vol_env.set_value(value),
@@ -636,7 +707,7 @@ impl Apu {
                 self.ch_3.enable = value & 0b1000_0000 != 0;
                 self.sound_enable.channels.ch_3 = self.ch_3.enable;
             }
-            Self::CH3_LEN_TIMER_ADDRESS => self.ch_3.len_timer = value,
+            Self::CH3_LEN_TIMER_ADDRESS => self.ch_3.len_timer = (!value as u16) + 1,
             Self::CH3_OUT_LEVEL_ADDRESS => self.ch_3.out_level = (value >> 5) & 0b11,
             Self::CH3_WAVELEN_LOW_ADDRESS => self.ch_3.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH3_WAVELEN_HIGH_CTRL_ADDRESS => {
@@ -647,7 +718,7 @@ impl Apu {
             }
 
             Self::CH4_UNUSED_ADDRESS => {}
-            Self::CH4_LEN_TIMER_ADDRESS => self.ch_4.len_timer = value & 0b11_1111,
+            Self::CH4_LEN_TIMER_ADDRESS => self.ch_4.len_timer = (!value & 0b11_1111) + 1,
             Self::CH4_VOLUME_ENVELOPPE_ADDRESS => self.ch_4.vol_env.set_value(value),
             Self::CH4_FREQ_RAND_ADDRESS => self.ch_4.freq_rand.set_value(value),
             Self::CH4_CTRL_ADDRESS => {
@@ -660,10 +731,10 @@ impl Apu {
             Self::SOUND_ENABLE_ADDRESS => {
                 self.sound_enable.enable_apu = value >> 7 != 0;
                 if !self.sound_enable.enable_apu {
-                    self.ch_1 = Default::default();
-                    self.ch_2 = Default::default();
+                    self.ch_1.reset();
+                    self.ch_2.reset();
                     self.ch_3.reset();
-                    self.ch_4 = Default::default();
+                    self.ch_4.reset();
                     self.master_vol_vin_pan = Default::default();
                     self.sound_panning = Default::default();
                 }
