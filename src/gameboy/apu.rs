@@ -45,7 +45,6 @@ struct SoundEnable {
 
 impl SoundEnable {
     fn value(&self) -> u8 {
-        //  dbg!(&self);
         (self.enable_apu as u8) << 7 | 0b111_0000 | self.channels.value()
     }
 }
@@ -301,11 +300,11 @@ enum LfsrWidth {
 struct FreqRand {
     clock_shift: u8,
     lfsr_width: LfsrWidth,
-    clock_divider: u8,
+    clock_div: u8,
 }
 impl FreqRand {
     fn value(&self) -> u8 {
-        (self.clock_shift & 0b1111) << 4 | (self.lfsr_width as u8) << 3 | self.clock_divider & 0b111
+        (self.clock_shift & 0b1111) << 4 | (self.lfsr_width as u8) << 3 | self.clock_div & 0b111
     }
 
     fn set_value(&mut self, value: u8) {
@@ -315,16 +314,18 @@ impl FreqRand {
         } else {
             LfsrWidth::B7
         };
-        self.clock_divider = value & 0b111;
+        self.clock_div = value & 0b111;
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Channel4 {
+    cycles: u32,
     len_timer: u8,
     volume: u8,
     vol_env: VolumeEnvelope,
     freq_rand: FreqRand,
+    lfsr: u16,
     trigger: bool,
     len_enable: bool,
 }
@@ -442,26 +443,29 @@ impl Apu {
         }
 
         // Tick channel 1 frequency sweep.
-        if self.div & 0b11 == 0
-            && self.ch_1.sweep.pace != 0
-            && self.ch_1.wavelen_ctrl.wavelen > 0
-            && (self.div >> 2) % self.ch_1.sweep.pace == 0
-        {
-            let offset =
-                self.ch_1.wavelen_ctrl.wavelen / 2u16.pow(self.ch_1.sweep.slope_ctrl as u32);
-            match self.ch_1.sweep.op {
-                SweepOp::Increase => {
-                    if self.ch_1.wavelen_ctrl.wavelen + offset >= Self::WAVELEN_MAX {
-                        self.sound_enable.channels.ch_1 = false;
-                    } else {
-                        self.ch_1.wavelen_ctrl.wavelen += offset;
+        if self.div & 0b11 == 0 {
+            let pace = if self.ch_1.sweep.pace != 0 {
+                self.ch_1.sweep.pace
+            } else {
+                8
+            };
+            if self.ch_1.wavelen_ctrl.wavelen > 0 && (self.div >> 2) % pace == 0 {
+                let offset =
+                    self.ch_1.wavelen_ctrl.wavelen / 2u16.pow(self.ch_1.sweep.slope_ctrl as u32);
+                match self.ch_1.sweep.op {
+                    SweepOp::Increase => {
+                        if self.ch_1.wavelen_ctrl.wavelen + offset >= Self::WAVELEN_MAX {
+                            self.sound_enable.channels.ch_1 = false;
+                        } else {
+                            self.ch_1.wavelen_ctrl.wavelen += offset;
+                        }
                     }
-                }
-                SweepOp::Decrease => {
-                    if offset > self.ch_1.wavelen_ctrl.wavelen {
-                        self.sound_enable.channels.ch_1 = false;
-                    } else {
-                        self.ch_1.wavelen_ctrl.wavelen -= offset;
+                    SweepOp::Decrease => {
+                        if offset > self.ch_1.wavelen_ctrl.wavelen {
+                            self.sound_enable.channels.ch_1 = false;
+                        } else {
+                            self.ch_1.wavelen_ctrl.wavelen -= offset;
+                        }
                     }
                 }
             }
@@ -533,6 +537,8 @@ impl Apu {
         if self.ch_4.vol_env.dac_enabled() && self.ch_4.trigger {
             self.ch_4.trigger = false;
             self.ch_4.volume = self.ch_4.vol_env.initial;
+            self.ch_4.lfsr = 0;
+            self.ch_4.cycles = 0;
             if self.ch_4.len_timer == 0 {
                 self.ch_4.len_timer = 0b100_0000;
             }
@@ -571,7 +577,35 @@ impl Apu {
             0
         };
 
-        let amp_ch4 = 0;
+        let amp_ch4 = if self.sound_enable.channels.ch_4 {
+            self.ch_4.cycles += 4;
+            let clock_factor = if self.ch_4.freq_rand.clock_div == 0 {
+                16 * (1 << (self.ch_4.freq_rand.clock_shift as u32)) / 2
+            } else {
+                16 * self.ch_4.freq_rand.clock_div as u32
+                    * (1 << (self.ch_4.freq_rand.clock_shift as u32))
+            };
+            if self.ch_4.cycles % clock_factor == 0 {
+                self.ch_4.cycles = 0;
+                let b0 = self.ch_4.lfsr & 1;
+                let b1 = (self.ch_4.lfsr >> 1) & 1;
+                let res = !(b0 ^ b1) & 1;
+                self.ch_4.lfsr = (self.ch_4.lfsr & !(1 << 15)) | (res << 15);
+                if let LfsrWidth::B7 = self.ch_4.freq_rand.lfsr_width {
+                    self.ch_4.lfsr = (self.ch_4.lfsr & !(1 << 7)) | (res << 7);
+                }
+                self.ch_4.lfsr >>= 1;
+            }
+
+            let val = if self.ch_4.lfsr & 1 != 0 {
+                self.ch_4.volume as i32
+            } else {
+                0
+            };
+            -val + 8
+        } else {
+            0
+        };
 
         for _ in 0..2 {
             let amp_ch3 = if self.sound_enable.channels.ch_3 {
@@ -680,10 +714,6 @@ impl Apu {
         // On DMG models, timer registers are still writable.
         if !self.sound_enable.enable_apu
             && address != Self::SOUND_ENABLE_ADDRESS
-            && address != Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS
-            && address != Self::CH2_WAVE_DUTY_TIMER_LEN_ADDRESS
-            && address != Self::CH3_LEN_TIMER_ADDRESS
-            && address != Self::CH4_LEN_TIMER_ADDRESS
             && !(Self::CH3_WAVE_PATTERN_START_ADDRESS..=Self::CH3_WAVE_PATTERN_END_ADDRESS)
                 .contains(&address)
         {
@@ -694,7 +724,6 @@ impl Apu {
             Self::CH1_SWEEP_ADDRESS => self.ch_1.sweep.set_value(value),
             Self::CH1_VOLUME_ENVELOPPE_ADDRESS => {
                 self.ch_1.vol_env.set_value(value);
-                dbg!(&self.ch_1.vol_env);
                 if !self.ch_1.vol_env.dac_enabled() {
                     self.sound_enable.channels.ch_1 = false;
                 }
@@ -757,6 +786,7 @@ impl Apu {
                     self.ch_2.reset();
                     self.ch_3.reset();
                     self.ch_4.reset();
+                    self.sound_enable.channels = Default::default();
                     self.master_vol_vin_pan = Default::default();
                     self.sound_panning = Default::default();
                 }
