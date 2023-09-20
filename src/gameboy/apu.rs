@@ -401,6 +401,15 @@ impl Apu {
         }
     }
 
+    fn tick_len<N: PrimInt + SubAssign>(len_timer: &mut N, len_enable: bool, ch_enable: &mut bool) {
+        if len_enable && *len_timer > N::zero() {
+            *len_timer -= N::one();
+            if *len_timer == N::zero() {
+                *ch_enable = false;
+            }
+        }
+    }
+
     pub(crate) fn inc_div(&mut self) {
         if !self.sound_enable.enable_apu {
             return;
@@ -408,34 +417,22 @@ impl Apu {
 
         // Tick sound length.
         if self.div & 0b1 == 0 {
-            fn tick_len<N: PrimInt + SubAssign>(
-                len_timer: &mut N,
-                len_enable: bool,
-                ch_enable: &mut bool,
-            ) {
-                if len_enable && *len_timer > N::zero() {
-                    *len_timer -= N::one();
-                    if *len_timer == N::zero() {
-                        *ch_enable = false;
-                    }
-                }
-            }
-            tick_len(
+            Self::tick_len(
                 &mut self.ch_1.wave_duty_len_timer.len_timer,
                 self.ch_1.wavelen_ctrl.len_enable,
                 &mut self.sound_enable.channels.ch_1,
             );
-            tick_len(
+            Self::tick_len(
                 &mut self.ch_2.wave_duty_len_timer.len_timer,
                 self.ch_2.wavelen_ctrl.len_enable,
                 &mut self.sound_enable.channels.ch_2,
             );
-            tick_len(
+            Self::tick_len(
                 &mut self.ch_3.len_timer,
                 self.ch_3.wavelen_ctrl.len_enable,
                 &mut self.sound_enable.channels.ch_3,
             );
-            tick_len(
+            Self::tick_len(
                 &mut self.ch_4.len_timer,
                 self.ch_4.len_enable,
                 &mut self.sound_enable.channels.ch_4,
@@ -513,6 +510,13 @@ impl Apu {
                 self.ch_1.wave_duty_len_timer.len_timer = 0b100_0000;
             }
             self.sound_enable.channels.ch_1 = true;
+            if (self.div & 1) == 1 {
+                Self::tick_len(
+                    &mut self.ch_1.wave_duty_len_timer.len_timer,
+                    self.ch_1.wavelen_ctrl.len_enable,
+                    &mut self.sound_enable.channels.ch_1,
+                );
+            }
         }
 
         if self.ch_2.vol_env.dac_enabled() && self.ch_2.wavelen_ctrl.trigger {
@@ -523,6 +527,13 @@ impl Apu {
                 self.ch_2.wave_duty_len_timer.len_timer = 0b100_0000;
             }
             self.sound_enable.channels.ch_2 = true;
+            if self.div & 0b1 == 1 {
+                Self::tick_len(
+                    &mut self.ch_2.wave_duty_len_timer.len_timer,
+                    self.ch_2.wavelen_ctrl.len_enable,
+                    &mut self.sound_enable.channels.ch_2,
+                );
+            }
         }
 
         if self.ch_3.dac_enable && self.ch_3.wavelen_ctrl.trigger {
@@ -532,6 +543,13 @@ impl Apu {
                 self.ch_3.len_timer = 0b1_0000_0000;
             }
             self.sound_enable.channels.ch_3 = true;
+            if self.div & 0b1 == 1 {
+                Self::tick_len(
+                    &mut self.ch_3.len_timer,
+                    self.ch_3.wavelen_ctrl.len_enable,
+                    &mut self.sound_enable.channels.ch_3,
+                );
+            }
         }
 
         if self.ch_4.vol_env.dac_enabled() && self.ch_4.trigger {
@@ -543,6 +561,13 @@ impl Apu {
                 self.ch_4.len_timer = 0b100_0000;
             }
             self.sound_enable.channels.ch_4 = true;
+            if self.div & 0b1 == 1 {
+                Self::tick_len(
+                    &mut self.ch_4.len_timer,
+                    self.ch_4.len_enable,
+                    &mut self.sound_enable.channels.ch_4,
+                );
+            }
         }
 
         let amp_ch1 = if self.sound_enable.channels.ch_1 {
@@ -731,7 +756,7 @@ impl Apu {
             Self::CH1_WAVE_DUTY_TIMER_LEN_ADDRESS => self.ch_1.wave_duty_len_timer.set_value(value),
             Self::CH1_WAVELEN_LOW_ADDRESS => self.ch_1.wavelen_ctrl.set_value_wavelen_l(value),
             Self::CH1_WAVELEN_HIGH_CTRL_ADDRESS => {
-                self.ch_1.wavelen_ctrl.set_value_wavelen_h_ctrl(value)
+                self.ch_1.wavelen_ctrl.set_value_wavelen_h_ctrl(value);
             }
 
             Self::CH2_UNUSED_ADDRESS => {}
@@ -782,6 +807,7 @@ impl Apu {
             Self::SOUND_ENABLE_ADDRESS => {
                 self.sound_enable.enable_apu = value >> 7 != 0;
                 if !self.sound_enable.enable_apu {
+                    self.div = 0;
                     self.ch_1.reset();
                     self.ch_2.reset();
                     self.ch_3.reset();
